@@ -98,6 +98,10 @@ def nuevo_caso(session_id=None) -> dict:
         # Evita repetir preguntas innecesariamente.
         "preguntas_realizadas": [],
 
+        # Veces consecutivas que una respuesta no llenó el dato pedido.
+        # Permite cambiar de estrategia en vez de repetir como un disco rayado.
+        "intentos_fallidos": {},
+
         # Slot al que estamos esperando respuesta.
         "esperando": None,
 
@@ -168,6 +172,7 @@ def actualizar_desde_extraccion(caso: dict, resultado: dict) -> dict:
     esperado = nuevo.get("esperando")
     if esperado and _tiene_valor(nuevo, esperado):
         nuevo["esperando"] = None
+        nuevo.setdefault("intentos_fallidos", {}).pop(esperado, None)
 
     return nuevo
 

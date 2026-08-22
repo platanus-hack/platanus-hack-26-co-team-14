@@ -203,7 +203,8 @@ async def webhook(
         len(pendientes),
         [
             {"id": m.get("id"), "tipo": m.get("tipo"),
-             "direccion": m.get("direccion"), "telefono": bool(m.get("telefono"))}
+             "direccion": m.get("direccion"), "telefono": bool(m.get("telefono")),
+             "estructura": m.get("estructura") if not m.get("telefono") else None}
             for m in normalizados
         ],
     )

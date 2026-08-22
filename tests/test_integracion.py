@@ -119,8 +119,8 @@ def test_tutela_de_un_menor_termina_en_documento(tmp_path):
 # LO QUE NO PUEDE SALIR, NO SALE
 # ============================================================
 
-def test_tutela_propia_no_inventa_minuta():
-    """No hay plantilla para tutelar a nombre propio. Se dice, no se improvisa."""
+def test_tutela_propia_termina_en_documento():
+    """La minuta propia deriva de la base adulta y no afirma agencia oficiosa."""
     doble = ClaudeDoble(
         inicial={
             "tutela_previa_cumplida": False,
@@ -137,6 +137,8 @@ def test_tutela_propia_no_inventa_minuta():
             "ciudad_vulneracion": "Medellín",
             "direccion_notificaciones": "Carrera 45 número 12-30",
             "hecho_vulneracion": "me dicen que no hay y que vuelva",
+            "diagnostico": "diabetes",
+            "fecha_orden": "12 de marzo",
         },
     )
 
@@ -147,10 +149,13 @@ def test_tutela_propia_no_inventa_minuta():
         respuestas=dict(doble.guion),
     )
 
-    assert not any(a["tipo"] == "documento" for a in acciones)
-    dicho = textos(acciones).lower()
-    assert "tutela" in dicho
-    assert "personería" in dicho or "defensoría" in dicho
+    assert any(a["tipo"] == "documento" for a in acciones), textos(acciones)
+    ruta = next(a["archivo"] for a in acciones if a["tipo"] == "documento")
+    doc = Document(ruta)
+    contenido = "\n".join(p.text for p in doc.paragraphs).lower()
+    assert "pedro nel rúa" in contenido
+    assert "agente oficioso" not in contenido
+    assert "mi madre" not in contenido
 
 
 def test_sin_pedir_nada_va_a_peticion():
@@ -213,3 +218,37 @@ def test_audio_ininteligible_no_rompe_nada():
     sesiones.borrar("573005050505")
 
     assert "repetir" in textos(acciones).lower()
+
+
+def test_segundo_intento_fallido_pide_respuesta_escrita():
+    telefono = "573006060606"
+    doble = ClaudeDoble(inicial={})
+    sesiones.borrar(telefono)
+
+    procesar_turno(telefono, "buenas", client=doble)
+    primera_repeticion = procesar_turno(telefono, "no se entendió", client=doble)
+    segunda_repeticion = procesar_turno(telefono, "tampoco", client=doble)
+
+    assert "intentemos una vez más" in textos(primera_repeticion).lower()
+    assert "escríbamela aquí por whatsapp" in textos(segunda_repeticion).lower()
+    sesiones.borrar(telefono)
+
+
+def test_responde_pregunta_lateral_sin_perder_el_dato_pendiente():
+    telefono = "573006060607"
+    doble = ClaudeDoble(inicial={})
+    sesiones.borrar(telefono)
+
+    procesar_turno(telefono, "buenas", client=doble)
+    pendiente_antes = sesiones.obtener(telefono)["esperando"]
+    acciones = procesar_turno(
+        telefono,
+        "¿Hay algún correo electrónico al que pueda enviar esta información?",
+        client=doble,
+    )
+
+    dicho = textos(acciones).lower()
+    assert "cuando terminemos" in dicho
+    assert "correo electrónico" in dicho
+    assert sesiones.obtener(telefono)["esperando"] == pendiente_antes
+    sesiones.borrar(telefono)

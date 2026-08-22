@@ -43,3 +43,18 @@ def test_desenvuelve_payload_sin_buffering_con_data():
 
     assert len(eventos) == 1
     assert leer_mensaje(eventos[0])["telefono"] == "+573004445566"
+
+
+def test_encuentra_telefono_en_contacto_de_una_variante_del_payload():
+    payload = {
+        "message": {
+            "id": "wamid.789",
+            "type": "text",
+            "text": {"body": "Hola"},
+            "kapso": {"direction": "inbound"},
+        },
+        "contact": {"wa_id": "573009998877"},
+        "phone_number_id": "business-number-id",
+    }
+
+    assert leer_mensaje(payload)["telefono"] == "573009998877"

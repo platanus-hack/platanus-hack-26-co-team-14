@@ -144,5 +144,19 @@ def extraer(texto: str, esperando=None, client=None) -> dict:
 
     limpios, descartados = verificar_evidencia(crudo, texto)
     slots = discretizar(limpios)        # SIN resolver: los ⊥ se preguntan
+
+    # Los nombres de EPS se resuelven primero contra el catálogo oficial. Una
+    # respuesta corta como «Compensar» no debe perderse porque el modelo haya
+    # devuelto baja confianza.
+    if esperando == "eps":
+        from datos.canales_salud import reconocer_eps
+        if eps := reconocer_eps(texto):
+            slots["eps"] = eps
+            crudo["eps"] = {
+                "valor": eps,
+                "confianza": 1.0,
+                "evidencia": texto,
+            }
+
     return {"slots": slots, "ruta": decidir_ruta(slots),
             "crudo": crudo, "descartados": descartados}

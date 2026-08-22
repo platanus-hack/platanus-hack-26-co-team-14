@@ -34,6 +34,10 @@ PLANTILLAS_DIR = BASE_DIR / "plantillas"
 
 
 PLANTILLAS = {
+    "tutela_propia": (
+        PLANTILLAS_DIR
+        / "tutela_propia_preparada.docx"
+    ),
     "tutela_menor": (
         PLANTILLAS_DIR
         / "tutela_menor_preparada.docx"

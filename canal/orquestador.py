@@ -76,6 +76,19 @@ def _normalizar(texto: str) -> str:
     return " ".join(re.sub(r"[^\w\s]", " ", plano).split())
 
 
+def _pregunta_sobre_radicacion(texto: str) -> bool:
+    """Preguntas laterales que no son la respuesta al dato pendiente."""
+    plano = _normalizar(texto)
+    menciona_destino = any(p in plano for p in (
+        "donde envio", "donde enviar", "a donde envio", "a donde enviar",
+        "donde entrego", "donde entregar", "donde radico", "donde radicar",
+        "correo electronico", "algun correo",
+    ))
+    return menciona_destino and any(
+        p in plano for p in ("env", "entreg", "radic", "correo")
+    )
+
+
 # ============================================================
 # ACCIONES
 # ============================================================
@@ -107,6 +120,23 @@ def procesar_turno(telefono: str, texto: str, transcripcion: dict | None = None,
 
     caso = sesiones.obtener(telefono)
     primera_vez = not caso.get("mensajes")
+    esperando_antes = caso.get("esperando")
+
+    # La persona puede hacer una pregunta durante el formulario. Se responde
+    # sin pasarla por extracción ni perder el dato que todavía falta.
+    if esperando_antes and _pregunta_sobre_radicacion(texto):
+        pregunta_pendiente = PREGUNTAS_DATOS.get(esperando_antes)
+        if pregunta_pendiente is None:
+            from core.preguntas import PREGUNTAS_TRIAGE
+            pregunta_pendiente = PREGUNTAS_TRIAGE.get(esperando_antes)
+        respuesta = (
+            "Cuando terminemos, le enviaré el documento por este mismo chat. "
+            "También le indicaré el correo electrónico del juzgado si está "
+            "verificado. Usted podrá enviarlo allí o llevarlo a la personería, "
+            "a la Defensoría del Pueblo o a un juzgado. "
+            "Para continuar: " + (pregunta_pendiente or "necesito el dato que le pregunté antes.")
+        )
+        return _decir(respuesta)
 
     if not texto:
         return _decir(
@@ -140,7 +170,19 @@ def procesar_turno(telefono: str, texto: str, transcripcion: dict | None = None,
         return acciones + salida
 
     if accion["accion"] == "preguntar":
-        acciones += _decir(accion["texto"])
+        slot = accion["slot"]
+        pregunta = accion["texto"]
+        if esperando_antes == slot:
+            intentos = caso.setdefault("intentos_fallidos", {})
+            intentos[slot] = intentos.get(slot, 0) + 1
+            if intentos[slot] >= 2:
+                pregunta = (
+                    "Todavía no logré entender esa respuesta. Si le es posible, "
+                    "escríbamela aquí por WhatsApp. " + pregunta
+                )
+            else:
+                pregunta = "No logré entender esa respuesta. Intentemos una vez más. " + pregunta
+        acciones += _decir(pregunta)
         sesiones.guardar(telefono, caso)
         return acciones
 
@@ -208,12 +250,6 @@ def _cerrar_tutela(telefono: str, caso: dict,
     if tipo is None:
         return _preguntar(caso, "paciente")
 
-    if tipo == campos.SIN_PLANTILLA:
-        return caso, _decir(
-            "Su caso sí es para tutela. Todavía no tengo la minuta para "
-            "tutelas a nombre propio, así que no le voy a entregar un "
-            "documento a medias. " + FALLBACK_RADICACION)
-
     if pendientes := campos.faltantes(tipo, datos):
         return _preguntar(caso, pendientes[0])
 
@@ -254,7 +290,7 @@ def _resumen_tutela(render: dict, revisiones: list[str]) -> str:
 
     if correo:
         lineas.append(
-            f"Va dirigida al {juez}. Puede enviarla al correo {correo}, "
+            f"Va dirigida al {juez}. Puede enviarla al correo electrónico {correo}, "
             f"o llevarla en persona.")
     else:
         lineas.append(f"Va dirigida al {juez}. " + FALLBACK_RADICACION)

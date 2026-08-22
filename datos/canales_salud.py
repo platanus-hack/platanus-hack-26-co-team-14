@@ -10,6 +10,39 @@ import re
 import unicodedata
 from difflib import SequenceMatcher
 
+# Catálogo oficial de EPS vigentes, Ministerio de Salud, 5 de junio de 2025.
+# Reconocer una entidad NO significa que tengamos un canal web verificado.
+EPS_VIGENTES = {
+    "coosalud": "Coosalud EPS-S",
+    "nueva eps": "Nueva EPS",
+    "mutual ser": "Mutual Ser",
+    "salud mia": "Salud Mía",
+    "aliansalud": "Aliansalud EPS",
+    "salud total": "Salud Total EPS",
+    "sanitas": "EPS Sanitas",
+    "sura": "EPS Sura",
+    "famisanar": "Famisanar EPS",
+    "sos": "Servicio Occidental de Salud EPS SOS",
+    "comfenalco valle": "Comfenalco Valle EPS",
+    "compensar": "Compensar EPS",
+    "epm": "Empresas Públicas de Medellín EPM",
+    "ferrocarriles nacionales": "Fondo de Pasivo Social de Ferrocarriles Nacionales",
+    "cajacopi": "Cajacopi Atlántico",
+    "capresoca": "Capresoca EPS",
+    "comfachoco": "Comfachocó",
+    "comfaoriente": "Comfaoriente",
+    "familiar de colombia": "EPS Familiar de Colombia",
+    "asmet salud": "Asmet Salud",
+    "emssanar": "Emssanar E.S.S.",
+    "capital salud": "Capital Salud EPS-S",
+    "savia salud": "Savia Salud EPS",
+    "dusakawi": "Dusakawi EPSI",
+    "aic": "Asociación Indígena del Cauca EPSI",
+    "anas wayuu": "Anas Wayuu EPSI",
+    "mallamas": "Mallamas EPSI",
+    "pijaos salud": "Pijaos Salud EPSI",
+}
+
 
 CANALES = {
     "sanitas": {
@@ -84,6 +117,25 @@ ALIASES = {
 
     "saludtotal": "salud total",
     "salud total eps": "salud total",
+    "coosalud eps": "coosalud",
+    "coosalud eps s": "coosalud",
+    "mutualser": "mutual ser",
+    "salud mia eps": "salud mia",
+    "alianza salud": "aliansalud",
+    "aliansalud eps": "aliansalud",
+    "famisanar eps": "famisanar",
+    "servicio occidental de salud": "sos",
+    "eps sos": "sos",
+    "s o s": "sos",
+    "eps s o s": "sos",
+    "comfenalco valle eps": "comfenalco valle",
+    "cajacopi atlantico": "cajacopi",
+    "capital salud eps": "capital salud",
+    "savia salud eps": "savia salud",
+    "aic epsi": "aic",
+    "asociacion indigena del cauca": "aic",
+    "pijao salud": "pijaos salud",
+    "pijaos salud epsi": "pijaos salud",
 
     "fundacion santa fe de bogota":
         "fundacion santa fe",
@@ -97,6 +149,24 @@ ALIASES = {
     "pablo tobon":
         "hospital pablo tobon uribe",
 }
+
+
+def reconocer_eps(entidad: str, umbral: float = 0.76) -> str | None:
+    """Nombre canónico de una EPS conocida; nunca inventa una entidad."""
+    q = normalizar(entidad)
+    if not q:
+        return None
+
+    clave = ALIASES.get(q, q)
+    if clave in EPS_VIGENTES:
+        return EPS_VIGENTES[clave]
+
+    candidatos = []
+    for llave, nombre in EPS_VIGENTES.items():
+        score = max(similitud(q, llave), similitud(q, nombre))
+        candidatos.append((score, nombre))
+    score, nombre = max(candidatos)
+    return nombre if score >= umbral else None
 
 
 def normalizar(texto: str | None) -> str:
@@ -151,11 +221,17 @@ def resolver_canal(
     # Exacto en alias
     if q in ALIASES:
         clave = ALIASES[q]
-
-        return {
-            "estado": "exacto",
-            "canal": CANALES[clave],
-        }
+        if clave in CANALES:
+            return {
+                "estado": "exacto",
+                "canal": CANALES[clave],
+            }
+        if clave in EPS_VIGENTES:
+            return {
+                "estado": "eps_reconocida_sin_canal",
+                "entidad": EPS_VIGENTES[clave],
+                "canal": None,
+            }
 
     # Exacto en catálogo
     if q in CANALES:
@@ -200,8 +276,10 @@ def resolver_canal(
     mejor = candidatos[0]
 
     if mejor[0] < umbral:
+        reconocida = reconocer_eps(entidad)
         return {
-            "estado": "no_encontrado",
+            "estado": "eps_reconocida_sin_canal" if reconocida else "no_encontrado",
+            "entidad": reconocida,
             "canal": None,
         }
 

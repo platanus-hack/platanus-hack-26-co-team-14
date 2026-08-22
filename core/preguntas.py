@@ -57,7 +57,7 @@ PREGUNTAS_DATOS = {
         "¿En qué municipio fue expedida su cédula?",
 
     "eps":
-        "¿Cuál es su EPS?",
+        "¿Cómo se llama su EPS? Por ejemplo: Compensar, Sanitas, Nueva EPS o Sura.",
 
     "servicio_negado":
         "¿Qué medicamento, procedimiento, tratamiento o servicio necesita?",
@@ -66,7 +66,7 @@ PREGUNTAS_DATOS = {
         "¿En qué municipio está ocurriendo este problema con la EPS?",
 
     "direccion_notificaciones":
-        "¿Qué dirección o medio quiere usar para recibir notificaciones?",
+        "¿En qué dirección física o correo electrónico quiere recibir las notificaciones?",
 
     "numero_fallo":
         "¿Cuál es el número del fallo de tutela?",

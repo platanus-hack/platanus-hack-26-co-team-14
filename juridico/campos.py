@@ -33,10 +33,12 @@ from datos.juzgados import contexto_juzgado
 # nombre de otro. No hay minuta para quien tutela por sí mismo, y no se
 # inventa una: se avisa y se para.
 TIPOS = {
+    "yo": "tutela_propia",
     "menor": "tutela_menor",
     "otro": "tutela_agente",
 }
 
+# Compatibilidad con consumidores antiguos. Ahora sí existe la plantilla.
 SIN_PLANTILLA = "tutela_propia"
 
 
@@ -50,9 +52,6 @@ def tipo_documento(datos: dict) -> str | None:
 
     if paciente in TIPOS:
         return TIPOS[paciente]
-
-    if paciente == "yo":
-        return SIN_PLANTILLA
 
     # Sin respuesta explícita, un nombre de agenciado ya lo dice.
     if datos.get("nombre_menor"):
@@ -71,6 +70,18 @@ def tipo_documento(datos: dict) -> str | None:
 # En orden de pregunta. Lo que identifica a la persona primero, el relato
 # después: nadie cuenta su historia y luego deletrea una cédula.
 REQUERIDOS = {
+    "tutela_propia": [
+        "nombre_completo",
+        "cedula",
+        "lugar_expedicion",
+        "eps",
+        "diagnostico",
+        "servicio_negado",
+        "fecha_orden",
+        "hecho_vulneracion",
+        "ciudad_vulneracion",
+        "direccion_notificaciones",
+    ],
     "tutela_menor": [
         "nombre_completo",
         "cedula",
@@ -352,6 +363,17 @@ def contexto(tipo: str, datos: dict, telefono: str | None = None) -> dict:
         })
 
     # ── el adulto agenciado ──────────────────────────────────────────────
+    if tipo in {"tutela_agente", "tutela_propia"}:
+        fecha = datos.get("fecha_orden")
+        if partida := partir_fecha(fecha):
+            ctx["dia_orden"], ctx["mes_orden"] = partida
+        else:
+            ctx["dia_orden"] = str(fecha or "").strip()
+            ctx["mes_orden"] = "la fecha indicada"
+            revisiones.append(
+                "No pude separar día y mes de la fecha de la orden médica; "
+                "corríjala en el documento antes de radicar.")
+
     if tipo == "tutela_agente":
         ctx.update({
             "nombre_agenciado": str(datos.get("nombre_agenciado") or "").strip(),
@@ -363,18 +385,6 @@ def contexto(tipo: str, datos: dict, telefono: str | None = None) -> dict:
             "relacion_agente_agenciado":
                 str(datos.get("relacion_agente_agenciado") or "").strip(),
         })
-
-        fecha = datos.get("fecha_orden")
-        if partida := partir_fecha(fecha):
-            ctx["dia_orden"], ctx["mes_orden"] = partida
-        else:
-            # La minuta parte la fecha en día y mes. Si lo que dijo no es una
-            # fecha reconocible, se conserva textual en vez de inventar una.
-            ctx["dia_orden"] = str(fecha or "").strip()
-            ctx["mes_orden"] = "la fecha indicada"
-            revisiones.append(
-                "No pude separar día y mes de la fecha de la orden médica; "
-                "corríjala en el documento antes de radicar.")
 
     ctx["_revisiones"] = revisiones
     return ctx

@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import logging
+import re
 
 import httpx
 
@@ -19,6 +20,30 @@ from . import config
 log = logging.getLogger("kapso")
 
 TIMEOUT = httpx.Timeout(60.0, connect=10.0)
+
+_CLAVES_TELEFONO = {
+    "from", "wa_id", "phone", "phone_number", "sender_phone",
+    "sender_phone_number", "contact_phone", "contact_phone_number",
+    "customer_phone", "customer_phone_number", "user_phone_number",
+}
+
+
+def _buscar_telefono(objeto) -> str | None:
+    """Encuentra el número de la persona sin confundirlo con phone_number_id."""
+    if isinstance(objeto, dict):
+        for clave, valor in objeto.items():
+            if clave.lower() in _CLAVES_TELEFONO and isinstance(valor, (str, int)):
+                candidato = str(valor).strip()
+                if len(re.sub(r"\D", "", candidato)) >= 7:
+                    return candidato
+        for valor in objeto.values():
+            if encontrado := _buscar_telefono(valor):
+                return encontrado
+    elif isinstance(objeto, list):
+        for valor in objeto:
+            if encontrado := _buscar_telefono(valor):
+                return encontrado
+    return None
 
 
 def _url(recurso: str) -> str:
@@ -100,6 +125,7 @@ def leer_mensaje(evento: dict) -> dict:
         kap.get("phone_number")
         or conv.get("phone_number") or conv.get("wa_id")
         or msg.get("from") or evento.get("from")
+        or _buscar_telefono(evento)
     )
 
     return {
@@ -113,6 +139,14 @@ def leer_mensaje(evento: dict) -> dict:
         "media_nombre": media.get("filename"),
         "transcripcion_kapso": transcript.get("text"),
         "timestamp": msg.get("timestamp"),
+        # Solo nombres de campos, nunca contenido sensible. Sirve para ajustar
+        # variantes nuevas del payload desde los logs de producción.
+        "estructura": {
+            "evento": sorted(evento.keys()),
+            "mensaje": sorted(msg.keys()),
+            "kapso": sorted(kap.keys()),
+            "conversacion": sorted(conv.keys()),
+        },
     }
 
 
