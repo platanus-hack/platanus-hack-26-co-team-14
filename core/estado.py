@@ -39,6 +39,26 @@ DATOS_CASO = [
     "direccion_notificaciones",
     "lugar_expedicion",
 
+    # Quién es el paciente: "yo" | "menor" | "otro".
+    # Decide la plantilla. No lo decide un modelo: se pregunta.
+    "paciente",
+
+    # Relato y diagnóstico, en palabras de la persona.
+    "diagnostico",
+    "hecho_vulneracion",
+
+    # menor de edad agenciado
+    "nombre_menor",
+    "registro_civil_menor",
+    "edad_menor",
+
+    # adulto agenciado
+    "nombre_agenciado",
+    "cedula_agenciado",
+    "lugar_expedicion_agenciado",
+    "edad_agenciado",
+    "relacion_agente_agenciado",
+
     # desacato
     "numero_fallo",
     "radicado",
@@ -139,7 +159,25 @@ def actualizar_desde_extraccion(caso: dict, resultado: dict) -> dict:
 
         nuevo["fuente"][campo] = "usuario"
 
+    # Si lo que estábamos esperando ya llegó, se deja de esperar.
+    #
+    # Sin esto, `esperando` se queda clavado en la primera pregunta y
+    # `extraer()` le sigue mandando a Haiku la pista «la última pregunta fue
+    # sobre X» durante el resto de la conversación. La pista deja de ayudar y
+    # empieza a estorbar: empuja a leer cada respuesta como si fuera sobre X.
+    esperado = nuevo.get("esperando")
+    if esperado and _tiene_valor(nuevo, esperado):
+        nuevo["esperando"] = None
+
     return nuevo
+
+
+def _tiene_valor(caso: dict, campo: str) -> bool:
+    for grupo in ("slots", "datos"):
+        valor = caso.get(grupo, {}).get(campo)
+        if valor is not None and valor != "":
+            return True
+    return False
 
 
 def marcar_pregunta(caso: dict, slot: str) -> dict:

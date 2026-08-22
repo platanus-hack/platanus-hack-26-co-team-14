@@ -82,6 +82,52 @@ PREGUNTAS_DATOS = {
 
     "puntos_incumplidos":
         "¿Qué ordenó exactamente el juez que la EPS todavía no ha cumplido?",
+
+    # ── Datos que exigen las minutas ─────────────────────────────────────
+    # Se preguntan solo cuando la plantilla escogida los necesita.
+    # Quién los pide: juridico/campos.py. Quién los formula: aquí.
+
+    "paciente":
+        "¿Para quién es esta tutela? Dígame si es para usted, "
+        "para un hijo o hija menor de edad, o para otra persona adulta "
+        "a la que usted está ayudando.",
+
+    "diagnostico":
+        "¿Cuál es el diagnóstico o la enfermedad por la que necesita "
+        "este servicio?",
+
+    "hecho_vulneracion":
+        "Cuénteme con sus palabras qué fue lo que pasó con la EPS: "
+        "qué le dijeron, cuándo, y por qué no le han dado lo que necesita.",
+
+    "fecha_orden":
+        "¿En qué fecha le ordenó el médico ese servicio o medicamento?",
+
+    "nombre_menor":
+        "¿Cuál es el nombre completo del menor?",
+
+    "registro_civil_menor":
+        "¿Cuál es el número de registro civil del menor?",
+
+    "edad_menor":
+        "¿Cuántos años tiene el menor?",
+
+    "nombre_agenciado":
+        "¿Cuál es el nombre completo de la persona a la que está ayudando?",
+
+    "cedula_agenciado":
+        "¿Cuál es el número de cédula de esa persona? "
+        "Por favor dígamelo dígito por dígito.",
+
+    "lugar_expedicion_agenciado":
+        "¿En qué municipio fue expedida la cédula de esa persona?",
+
+    "edad_agenciado":
+        "¿Cuántos años tiene esa persona?",
+
+    "relacion_agente_agenciado":
+        "¿Qué es esa persona suya? Por ejemplo: madre, padre, esposo, "
+        "hermana, vecino.",
 }
 
 

@@ -13,12 +13,19 @@ SKILL = (Path(__file__).parent / "skills/triage-extraccion/SKILL.md").read_text(
 
 BOOLEANOS = ["riesgo_vital", "sujeto_especial", "urgencia",
              "tutela_previa_cumplida", "termino_vencido"]
-ENUM = {"solicitud_previa": ["ninguna", "verbal", "escrita"]}
+ENUM = {"solicitud_previa": ["ninguna", "verbal", "escrita"],
+        # Para quién es el documento. Decide la plantilla, no la ruta.
+        "paciente": ["yo", "menor", "otro"]}
 TRIAGE = BOOLEANOS + list(ENUM)
 TEXTO = ["nombre_completo", "cedula", "eps", "servicio_negado", "ciudad_vulneracion",
          "fecha_orden", "direccion_notificaciones", "lugar_expedicion",
          "numero_fallo", "radicado", "fecha_fallo", "juzgado_fallo",
-         "puntos_incumplidos"]
+         "puntos_incumplidos",
+         # Datos que exigen las minutas (juridico/campos.py).
+         "diagnostico", "hecho_vulneracion",
+         "nombre_menor", "registro_civil_menor", "edad_menor",
+         "nombre_agenciado", "cedula_agenciado", "lugar_expedicion_agenciado",
+         "edad_agenciado", "relacion_agente_agenciado"]
 
 # Umbrales ASIMÉTRICOS. Aceptar un "sí" es barato; aceptar un "no" es caro,
 # porque un falso negativo en riesgo vital manda a PQRD a quien necesitaba tutela.
@@ -28,7 +35,10 @@ TAU_TEXTO = 0.40
 # Cómo resuelve cada ⊥ (mínima pérdida esperada, no máxima verosimilitud)
 RESOLUCION = {"riesgo_vital": True, "sujeto_especial": True,
               "urgencia": True, "tutela_previa_cumplida": False,
-              "termino_vencido": True, "solicitud_previa": "verbal"}
+              "termino_vencido": True, "solicitud_previa": "verbal",
+              # Quién es el paciente NO se resuelve por defecto: escoger mal
+              # la plantilla produce un documento dirigido a otra persona.
+              "paciente": None}
 
 _campo = {
     "type": "object",
@@ -105,7 +115,8 @@ def resolver(slots: dict) -> dict:
     Un ⊥ recién extraído significa "hay que preguntar", NO "asumir que sí".
     Aplicarlo de entrada anula el triage: todo saldría tutela.
     """
-    return {k: (RESOLUCION[k] if (k in TRIAGE and v is None) else v)
+    return {k: (RESOLUCION[k] if (k in TRIAGE and v is None
+                                  and RESOLUCION.get(k) is not None) else v)
             for k, v in slots.items()}
 
 

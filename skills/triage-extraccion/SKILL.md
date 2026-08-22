@@ -68,6 +68,37 @@ ganó, tampoco. Ante duda: `null`.
 Y si hay indicios de desacato: `numero_fallo`, `radicado`, `fecha_fallo`,
 `juzgado_fallo`, `puntos_incumplidos`.
 
+### Para quién es — `paciente`
+
+Uno de: `"yo"` · `"menor"` · `"otro"`.
+
+| Valor | Cuándo |
+|---|---|
+| `"yo"` | Habla de su propia salud: *"no me han dado mi insulina"* |
+| `"menor"` | Habla de un hijo, hija, nieto o cualquier menor de edad |
+| `"otro"` | Habla de otra persona adulta: su madre, su esposo, un vecino |
+
+Este campo escoge la minuta. Escoger mal produce un documento dirigido a otra
+persona, así que **ante duda va `null`** y se pregunta.
+
+### Datos de la persona agenciada
+
+Solo si `paciente` no es `"yo"`:
+
+- menor: `nombre_menor`, `registro_civil_menor`, `edad_menor`
+- adulto: `nombre_agenciado`, `cedula_agenciado`, `lugar_expedicion_agenciado`,
+  `edad_agenciado`, `relacion_agente_agenciado` (*madre*, *esposo*, *vecina*…)
+
+`nombre_completo`, `cedula` y `lugar_expedicion` son **siempre de quien habla**,
+aunque el enfermo sea otro. No los mezcles.
+
+### Relato
+
+- `diagnostico` — la enfermedad, tal como la nombró: *"diabetes"*, *"cáncer de seno"*
+- `hecho_vulneracion` — qué pasó con la EPS, **en las palabras de la persona**.
+  Aquí sí puedes redactar en prosa: es su relato, no una conclusión jurídica.
+  No añadas normas, ni sentencias, ni valoraciones que ella no haya dicho.
+
 ## Cómo calibrar la confianza
 
 - **0.9+** la persona lo dijo directo: *"tengo 78 años"*, *"me llamo Ana Mosquera"*

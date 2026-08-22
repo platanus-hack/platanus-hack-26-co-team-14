@@ -1,7 +1,16 @@
-flask==3.0.0
-python-dotenv==1.0.0
-requests==2.31.0
-openai==1.12.0
-elevenlabs==0.2.27
-anthropic==0.40.0
-httpx==0.27.0
+# Servidor
+fastapi>=0.115
+uvicorn[standard]>=0.34
+python-multipart>=0.0.9      # multipart en /api/transcribir
+
+# Cliente HTTP (Kapso y ElevenLabs se llaman por API, sin SDK)
+httpx>=0.28
+
+# Configuración
+python-dotenv>=1.0
+
+# Extracción de slots
+anthropic>=0.40
+
+# Render de las minutas
+python-docx>=1.1

@@ -1,5 +1,59 @@
+# ------------------------------------------------------------
+# Secretos — NUNCA subir
+# ------------------------------------------------------------
 .env
+.env.*
+!.env.example
+*.pem
+*.key
+credenciales*.json
+
+# ------------------------------------------------------------
+# Audios de usuarias — no persistimos casos individuales
+# ------------------------------------------------------------
+audios/*
+!audios/README.md
+*.ogg
+*.opus
 *.mp3
-test_*.py
---pycache__/
-*.pyc
+*.wav
+*.m4a
+
+# ------------------------------------------------------------
+# Documentos generados y casos abiertos
+# Contienen datos de salud: dato sensible (Ley 1581 de 2012, art. 5)
+# ------------------------------------------------------------
+salidas/
+.sesiones/
+*.pdf
+!juridico/plantillas/*.docx
+tmp/
+
+# ------------------------------------------------------------
+# Python
+# ------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ------------------------------------------------------------
+# Despliegue y herramientas
+# ------------------------------------------------------------
+.vercel
+puente/_media/
+herramientas/
+prueba_tts.*
+
+# ------------------------------------------------------------
+# Editores / sistema
+# ------------------------------------------------------------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

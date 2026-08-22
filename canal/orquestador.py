@@ -1,244 +1,343 @@
 """
-Adaptador entre canales externos y el core.
+Un turno de conversación, de principio a fin.
 
-WhatsApp/Kapso entrega texto.
-Este módulo ejecuta un turno del sistema.
+    texto de la usuaria
+        → core (extracción + triage + qué preguntar)
+        → juridico (qué minuta, qué falta, cómo se rellena)
+        → lista de acciones para el canal
+
+La lista de acciones es el contrato del puente: `{"tipo": "texto"|"audio"|
+"documento", ...}`. Quien las ejecuta es `puente/app.py`; aquí solo se decide
+qué decir.
+
+Este módulo no habla con Kapso ni con ElevenLabs. No sabe que existe WhatsApp.
 """
 
-from canal.sesiones import (
-    obtener_sesion,
-    guardar_sesion,
+from __future__ import annotations
+
+import logging
+import os
+import re
+import tempfile
+import unicodedata
+import uuid
+from pathlib import Path
+
+from canal import sesiones
+from core.bot_core import procesar_texto
+from core.estado import marcar_pregunta
+from core.preguntas import PREGUNTAS_DATOS
+from datos.canales_salud import resolver_canal
+from juridico import campos
+from juridico.render import renderizar_documento
+
+log = logging.getLogger("orquestador")
+
+# En serverless el proyecto está montado de solo lectura: lo único escribible
+# es el temporal. Y da igual que sea efímero, porque el documento se sube a
+# Kapso en esta misma invocación.
+DIR_SALIDAS = (
+    Path(tempfile.gettempdir()) / "tutela_salidas"
+    if (os.getenv("VERCEL") or os.getenv("VERCEL_ENV"))
+    else Path(campos.__file__).resolve().parent.parent / "salidas"
 )
 
-from datos.canales_salud import (
-    resolver_canal,
+
+# ============================================================
+# TEXTOS FIJOS
+# ============================================================
+
+SALUDO = (
+    "Buenos días. Soy el asistente de Temis. "
+    "Cuénteme con sus palabras qué le pasó con su EPS: "
+    "puede mandarme una nota de voz, sin apuro."
 )
 
-from juridico.render import (
-    renderizar_documento,
+# Sin dato verificado, esta salida siempre es válida: están obligados a
+# recibir el documento y a remitirlo.
+FALLBACK_RADICACION = (
+    "Lleve el documento a la personería municipal, a la Defensoría del Pueblo "
+    "o a cualquier juzgado. Están obligados a recibírselo y a remitirlo."
 )
 
+REINICIOS = {"reiniciar", "empezar de nuevo", "empezar de cero", "borrar todo",
+             "otra vez desde el principio", "nuevo caso", "cancelar"}
 
-def procesar_turno_core(
-    usuario_id: str,
-    texto: str,
-):
+# Rutas que no terminan en un documento: lo que se entrega es una indicación.
+# En cuanto el triage las decide, se contesta. Seguir pidiendo cédula y
+# dirección para acabar diciendo «radique aquí» es hacerle perder el tiempo a
+# alguien que ya nos contó su problema.
+SIN_DOCUMENTO = {"peticion", "pqrd", "esperar", "desacato"}
+
+
+def _normalizar(texto: str) -> str:
+    plano = unicodedata.normalize("NFKD", (texto or "").lower())
+    plano = "".join(c for c in plano if not unicodedata.combining(c))
+    return " ".join(re.sub(r"[^\w\s]", " ", plano).split())
+
+
+# ============================================================
+# ACCIONES
+# ============================================================
+
+def _decir(texto: str) -> list[dict]:
+    """Lo mismo escrito y hablado.
+
+    Escrito porque queda y se puede releer; hablado porque hay quien no lee.
+    Ese es el canal entero: no se escoge uno de los dos.
     """
-    Esta función será el único puente hacia bot_core.
-
-    Ajustaremos la llamada exacta según la firma que ya
-    tengas actualmente en core/bot_core.py.
-    """
-
-    from core.bot_core import procesar_mensaje
-
-    estado = obtener_sesion(
-        usuario_id
-    )
-
-    resultado = procesar_mensaje(
-        estado=estado,
-        texto=texto,
-    )
-
-    nuevo_estado = resultado[
-        "estado"
+    return [
+        {"tipo": "texto", "texto": texto},
+        {"tipo": "audio", "texto": texto},
     ]
 
-    guardar_sesion(
-        usuario_id,
-        nuevo_estado,
-    )
 
-    return resultado
+# ============================================================
+# TURNO
+# ============================================================
 
-def construir_respuesta_final(
-    usuario_id: str,
-    resultado: dict,
-):
-    """
-    Convierte el resultado interno del core
-    en una acción para el canal.
-    """
+def procesar_turno(telefono: str, texto: str, transcripcion: dict | None = None,
+                   client=None) -> list[dict]:
+    """Un mensaje entra, una lista de acciones sale."""
+    texto = (texto or "").strip()
 
-    estado = resultado[
-        "estado"
-    ]
+    if _normalizar(texto) in REINICIOS:
+        sesiones.borrar(telefono)
+        return _decir("Listo, empezamos de cero. " + SALUDO)
 
-    # --------------------------------------------------------
-    # Todavía falta información
-    # --------------------------------------------------------
+    caso = sesiones.obtener(telefono)
+    primera_vez = not caso.get("mensajes")
 
-    pregunta = resultado.get(
-        "pregunta"
-    )
+    if not texto:
+        return _decir(
+            "No logré entender el audio. ¿Me lo puede repetir más despacio?")
 
-    if pregunta:
-        return {
-            "tipo": "pregunta",
-            "texto": pregunta,
-        }
+    try:
+        resultado = procesar_texto(caso, texto, client=client)
+    except Exception:
+        log.exception("falló la extracción")
+        return _decir(
+            "Tuve un problema entendiendo lo que me dijo. "
+            "¿Me lo puede repetir?")
 
-    ruta = estado.get(
-        "ruta"
-    )
+    caso = resultado["caso"]
+    accion = resultado["accion"]
 
-    datos = estado.get(
-        "datos",
-        {}
-    )
+    acciones: list[dict] = []
 
-    # --------------------------------------------------------
-    # TUTELA
-    # --------------------------------------------------------
+    if primera_vez:
+        acciones.append({"tipo": "texto", "texto": SALUDO})
+
+    if _dudoso(transcripcion):
+        acciones.append({
+            "tipo": "texto",
+            "texto": f"Entendí esto: «{texto}». Si me equivoqué, dígamelo.",
+        })
+
+    if caso.get("ruta") in SIN_DOCUMENTO:
+        caso, salida = _cerrar_caso(telefono, caso)
+        _persistir(telefono, caso)
+        return acciones + salida
+
+    if accion["accion"] == "preguntar":
+        acciones += _decir(accion["texto"])
+        sesiones.guardar(telefono, caso)
+        return acciones
+
+    if accion["accion"] == "generar_documento":
+        caso, salida = _cerrar_caso(telefono, caso)
+        _persistir(telefono, caso)
+        return acciones + salida
+
+    log.warning("acción sin salida: %s", accion)
+    sesiones.guardar(telefono, caso)
+    return acciones + _decir(
+        "Necesito un dato más para poder ayudarle. "
+        "¿Me puede contar otra vez qué fue lo que pasó con su EPS?")
+
+
+def _dudoso(transcripcion: dict | None) -> bool:
+    return bool(transcripcion and transcripcion.get("baja_confianza"))
+
+
+def _persistir(telefono: str, caso: dict) -> None:
+    """Guarda el caso, salvo que ya haya cumplido su función."""
+    if caso.pop("_cerrado", False):
+        sesiones.borrar(telefono)
+        return
+    sesiones.guardar(telefono, caso)
+
+
+# ============================================================
+# CIERRE: LA RUTA YA ESTÁ DECIDIDA
+# ============================================================
+
+def _cerrar_caso(telefono: str, caso: dict) -> tuple[dict, list[dict]]:
+    """Devuelve (caso, acciones). El caso puede volver con una pregunta más:
+    las minutas piden datos que el triage no necesitaba."""
+    ruta = caso.get("ruta")
+    datos = caso.get("datos", {})
 
     if ruta == "tutela":
+        return _cerrar_tutela(telefono, caso, datos)
 
-        tipo_tutela = decidir_tipo_tutela(
-            datos
-        )
-
-        archivo = (
-            f"salidas/"
-            f"{usuario_id}_tutela.docx"
-        )
-
-        render = renderizar_documento(
-            tipo=tipo_tutela,
-            datos=datos,
-            salida=archivo,
-        )
-
-        return {
-            "tipo": "documento",
-
-            "ruta": "tutela",
-
-            "texto": (
-                "Ya tengo la información necesaria "
-                "para preparar tu acción de tutela."
-            ),
-
-            "archivo":
-                render["archivo"],
-
-            "juez_destino":
-                render["juez_destino"],
-
-            "email_juzgado":
-                render["email_juzgado"],
-
-            "dane_juzgado":
-                render["dane_juzgado"],
-        }
-
-    # --------------------------------------------------------
-    # PQR / PETICIÓN
-    # --------------------------------------------------------
-
-    if ruta in {
-        "pqrd",
-        "peticion",
-    }:
-
-        entidad = (
-            datos.get("eps")
-            or datos.get("ips")
-        )
-
-        canal = resolver_canal(
-            entidad
-        )
-
-        if not canal.get("canal"):
-
-            return {
-                "tipo": "instruccion",
-                "ruta": ruta,
-                "texto": (
-                    "Ya determiné la ruta, pero no tengo "
-                    "un canal verificado para esa entidad. "
-                    "No voy a inventar uno."
-                ),
-            }
-
-        info = canal["canal"]
-
-        return {
-            "tipo": "canal_radicar",
-
-            "ruta":
-                ruta,
-
-            "entidad":
-                info["nombre"],
-
-            "url":
-                info["url"],
-
-            "texto": (
-                f"Para {info['nombre']} puedes usar "
-                "su canal de atención y radicación."
-            ),
-        }
-
-    # --------------------------------------------------------
-    # ESPERAR
-    # --------------------------------------------------------
+    if ruta in {"pqrd", "peticion"}:
+        return caso, _cerrar_peticion(ruta, datos)
 
     if ruta == "esperar":
-        return {
-            "tipo": "instruccion",
-            "ruta": ruta,
-            "texto": (
-                "La solicitud ya fue presentada y el "
-                "término correspondiente todavía no "
-                "aparece vencido."
-            ),
-        }
-
-    # --------------------------------------------------------
-    # DESACATO
-    # --------------------------------------------------------
+        return caso, _decir(
+            "Su petición ya está radicada y el plazo todavía no se vence. "
+            "La EPS tiene 15 días hábiles para responderle. "
+            "Guarde la copia radicada y, si se cumple el plazo sin respuesta, "
+            "vuelva y seguimos.")
 
     if ruta == "desacato":
-        return {
-            "tipo": "pendiente_documento",
-            "ruta": ruta,
-            "texto": (
-                "El caso corresponde a seguimiento "
-                "de una tutela previa posiblemente "
-                "incumplida."
-            ),
-        }
+        return caso, _cerrar_desacato(datos)
 
-    return {
-        "tipo": "error_controlado",
-        "texto": (
-            "No pude determinar una salida válida "
-            "para el estado actual."
-        ),
-    }
+    log.error("ruta desconocida al cerrar: %s", ruta)
+    return caso, _decir(
+        "No pude determinar el camino correcto para su caso. " + FALLBACK_RADICACION)
 
 
-def decidir_tipo_tutela(
-    datos: dict,
-):
-    """
-    La selección de plantilla también es determinística.
-    """
+# ── tutela ───────────────────────────────────────────────────────────────
 
-    if datos.get(
-        "nombre_menor"
-    ):
-        return "tutela_menor"
+def _cerrar_tutela(telefono: str, caso: dict,
+                   datos: dict) -> tuple[dict, list[dict]]:
+    tipo = campos.tipo_documento(datos)
 
-    if datos.get(
-        "nombre_agenciado"
-    ):
-        return "tutela_agente"
+    if tipo is None:
+        return _preguntar(caso, "paciente")
 
-    raise ValueError(
-        "Tutela decidida pero no hay suficiente "
-        "información para seleccionar plantilla."
-    )
+    if tipo == campos.SIN_PLANTILLA:
+        return caso, _decir(
+            "Su caso sí es para tutela. Todavía no tengo la minuta para "
+            "tutelas a nombre propio, así que no le voy a entregar un "
+            "documento a medias. " + FALLBACK_RADICACION)
+
+    if pendientes := campos.faltantes(tipo, datos):
+        return _preguntar(caso, pendientes[0])
+
+    try:
+        contexto = campos.contexto(tipo, datos, telefono=telefono)
+        revisiones = contexto.pop("_revisiones", [])
+        archivo = DIR_SALIDAS / f"{uuid.uuid4().hex}_{tipo}.docx"
+        render = renderizar_documento(
+            tipo=tipo, datos=contexto, salida=archivo, resolver_juzgado=False)
+    except Exception:
+        log.exception("no se pudo generar el documento (%s)", tipo)
+        return caso, _decir(
+            "Tengo toda su información pero el documento no me salió bien. "
+            "No le voy a mandar algo incompleto. " + FALLBACK_RADICACION)
+
+    resumen = _resumen_tutela(render, revisiones)
+
+    acciones = [
+        {"tipo": "texto", "texto": resumen},
+        {"tipo": "documento",
+         "archivo": render["archivo"],
+         "nombre": "tutela.docx",
+         "descripcion": "Su acción de tutela, lista para revisar y radicar."},
+        {"tipo": "audio", "texto": resumen},
+    ]
+
+    # El caso cumplió su función. No guardamos datos de salud más tiempo del
+    # que hace falta (Ley 1581 de 2012, art. 5): lo borra `_persistir`.
+    caso["_cerrado"] = True
+    return caso, acciones
+
+
+def _resumen_tutela(render: dict, revisiones: list[str]) -> str:
+    lineas = ["Le mandé su acción de tutela. Léala antes de radicarla."]
+
+    juez = render.get("juez_destino")
+    correo = render.get("email_juzgado")
+
+    if correo:
+        lineas.append(
+            f"Va dirigida al {juez}. Puede enviarla al correo {correo}, "
+            f"o llevarla en persona.")
+    else:
+        lineas.append(f"Va dirigida al {juez}. " + FALLBACK_RADICACION)
+
+    lineas.append(
+        "Recuerde: la tutela la tiene que presentar usted. "
+        "Nosotros no la radicamos.")
+
+    if revisiones:
+        lineas.append("Antes de firmarla, revise esto: " + " ".join(revisiones))
+
+    return " ".join(lineas)
+
+
+# ── petición y PQRD ──────────────────────────────────────────────────────
+
+def _cerrar_peticion(ruta: str, datos: dict) -> list[dict]:
+    entidad = datos.get("eps") or datos.get("ips") or ""
+    canal = resolver_canal(entidad).get("canal")
+
+    que_es = ("un derecho de petición" if ruta == "peticion"
+              else "una queja formal ante su EPS")
+
+    if not canal:
+        return _decir(
+            f"Lo que le corresponde ahora es {que_es}. "
+            f"No tengo un canal verificado para «{entidad}» y no le voy a "
+            f"inventar uno. " + FALLBACK_RADICACION)
+
+    return _decir(
+        f"Lo que le corresponde ahora es {que_es}. "
+        f"Radíquelo en {canal['nombre']}, en {canal['url']}. "
+        f"Pida siempre el número de radicado y guárdelo: "
+        f"es la prueba de que pidió, y sin ella la tutela cuesta más.")
+
+
+# ── desacato ─────────────────────────────────────────────────────────────
+
+def _cerrar_desacato(datos: dict) -> list[dict]:
+    juzgado = datos.get("juzgado_fallo")
+    radicado = datos.get("radicado")
+
+    detalle = ""
+    if juzgado:
+        detalle = f" Se presenta ante el mismo despacho que falló: {juzgado}."
+        if radicado:
+            detalle += f" Cite el radicado {radicado}."
+
+    return _decir(
+        "Si un juez ya le dio la razón y la EPS no cumplió, lo que procede es "
+        "un incidente de desacato, no otra tutela." + detalle +
+        " Todavía no tengo la minuta de desacato preparada, así que no le voy "
+        "a entregar un documento a medias. " + FALLBACK_RADICACION)
+
+
+# ── preguntar un dato que pide la minuta ─────────────────────────────────
+
+def _preguntar(caso: dict, slot: str) -> tuple[dict, list[dict]]:
+    """Pide un dato que el triage no necesitaba pero la minuta sí."""
+    caso = marcar_pregunta(caso, slot)
+    pregunta = PREGUNTAS_DATOS.get(slot, f"Necesito un dato más: {slot}.")
+    return caso, _decir(pregunta)
+
+
+# ============================================================
+# COMPATIBILIDAD
+# ============================================================
+# La versión anterior exponía estas dos funciones. Se mantienen para no
+# romper nada que todavía las llame.
+
+def procesar_turno_core(usuario_id: str, texto: str) -> dict:
+    caso = sesiones.obtener(usuario_id)
+    resultado = procesar_texto(caso, texto)
+    sesiones.guardar(usuario_id, resultado["caso"])
+    return resultado
+
+
+def construir_respuesta_final(usuario_id: str, resultado: dict) -> list[dict]:
+    caso = resultado["caso"]
+
+    if resultado.get("respuesta"):
+        return _decir(resultado["respuesta"])
+
+    caso, acciones = _cerrar_caso(usuario_id, caso)
+    _persistir(usuario_id, caso)
+    return acciones

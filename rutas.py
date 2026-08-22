@@ -83,9 +83,14 @@ REQUISITOS = {
     "esperar":  [],
     "pqrd":     ["nombre_completo", "cedula", "eps", "servicio_negado",
                  "direccion_notificaciones", "ciudad_vulneracion"],
+    # `hecho_vulneracion` es el relato de lo que pasó con la EPS, en palabras
+    # de la persona. Antes decía `tutela_previa_hechos`, que no existía en
+    # core/estado.py ni en las preguntas: la ruta de tutela pedía un dato
+    # que nadie podía contestar y el flujo se quedaba preguntándolo para
+    # siempre. Es además el campo que la minuta necesita ({{hecho_vulneracion}}).
     "tutela":   ["nombre_completo", "cedula", "lugar_expedicion", "eps",
                  "servicio_negado", "ciudad_vulneracion",
-                 "direccion_notificaciones", "tutela_previa_hechos"],
+                 "direccion_notificaciones", "hecho_vulneracion"],
     "desacato": ["nombre_completo", "cedula", "lugar_expedicion", "eps",
                  "ciudad_vulneracion", "direccion_notificaciones",
                  "numero_fallo", "radicado", "fecha_fallo", "juzgado_fallo",
