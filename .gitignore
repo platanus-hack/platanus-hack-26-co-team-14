@@ -1,0 +1,5 @@
+.env
+*.mp3
+test_*.py
+--pycache__/
+*.pyc
