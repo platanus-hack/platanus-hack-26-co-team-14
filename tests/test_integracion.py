@@ -134,7 +134,7 @@ def test_tutela_propia_termina_en_documento():
             "nombre_completo": "Pedro Nel Rúa",
             "cedula": "71234567",
             "lugar_expedicion": "Medellín",
-            "ciudad_vulneracion": "Medellín",
+            "ciudad_vulneracion": "Bogotá",
             "direccion_notificaciones": "Carrera 45 número 12-30",
             "hecho_vulneracion": "me dicen que no hay y que vuelva",
             "diagnostico": "diabetes",
@@ -154,8 +154,12 @@ def test_tutela_propia_termina_en_documento():
     doc = Document(ruta)
     contenido = "\n".join(p.text for p in doc.paragraphs).lower()
     assert "pedro nel rúa" in contenido
+    assert "me dicen que no hay y que vuelva" in contenido
     assert "agente oficioso" not in contenido
     assert "mi madre" not in contenido
+    dicho = textos(acciones).lower()
+    assert "@cendoj.ramajudicial.gov.co" in dicho
+    assert "el juzgado se encargará de notificarla" in dicho
 
 
 def test_sin_pedir_nada_va_a_peticion():
@@ -202,6 +206,40 @@ def test_cada_respuesta_va_escrita_y_hablada():
     assert {a["tipo"] for a in acciones} >= {"texto", "audio"}
 
 
+def test_saludo_solo_invita_a_contar_la_historia_sin_activar_triage():
+    telefono = "573002020203"
+    doble = ClaudeDoble(inicial={})
+    sesiones.borrar(telefono)
+
+    acciones = procesar_turno(telefono, "Hola", client=doble)
+    dicho = textos(acciones).lower()
+
+    assert "cuénteme con sus palabras" in dicho
+    assert "tutela" not in dicho
+    assert sesiones.obtener(telefono)["esperando"] is None
+    assert doble.preguntado == []
+    sesiones.borrar(telefono)
+
+
+def test_triage_empieza_despues_de_recibir_la_historia():
+    telefono = "573002020204"
+    doble = ClaudeDoble(inicial={})
+    sesiones.borrar(telefono)
+
+    procesar_turno(telefono, "Buenos días", client=doble)
+    acciones = procesar_turno(
+        telefono,
+        "La EPS no me entrega el medicamento que me ordenó el médico",
+        client=doble,
+    )
+
+    dicho = textos(acciones).lower()
+    assert "antes de seguir" in dicho
+    assert "presentado una tutela" in dicho
+    assert "cuénteme con sus palabras" not in dicho
+    sesiones.borrar(telefono)
+
+
 def test_reiniciar_borra_el_caso():
     doble = ClaudeDoble(inicial={"eps": "sura"})
     procesar_turno("573003030303", "la eps sura no me atiende", client=doble)
@@ -226,6 +264,11 @@ def test_segundo_intento_fallido_pide_respuesta_escrita():
     sesiones.borrar(telefono)
 
     procesar_turno(telefono, "buenas", client=doble)
+    procesar_turno(
+        telefono,
+        "La EPS no me está entregando el medicamento que necesito",
+        client=doble,
+    )
     primera_repeticion = procesar_turno(telefono, "no se entendió", client=doble)
     segunda_repeticion = procesar_turno(telefono, "tampoco", client=doble)
 
@@ -240,6 +283,11 @@ def test_responde_pregunta_lateral_sin_perder_el_dato_pendiente():
     sesiones.borrar(telefono)
 
     procesar_turno(telefono, "buenas", client=doble)
+    procesar_turno(
+        telefono,
+        "La EPS no me está entregando el medicamento que necesito",
+        client=doble,
+    )
     pendiente_antes = sesiones.obtener(telefono)["esperando"]
     acciones = procesar_turno(
         telefono,

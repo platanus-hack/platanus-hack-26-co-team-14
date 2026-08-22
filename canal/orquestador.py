@@ -25,7 +25,7 @@ from pathlib import Path
 
 from canal import sesiones
 from core.bot_core import procesar_texto
-from core.estado import marcar_pregunta
+from core.estado import marcar_pregunta, registrar_mensaje
 from core.preguntas import PREGUNTAS_DATOS
 from datos.canales_salud import resolver_canal
 from juridico import campos
@@ -62,6 +62,11 @@ FALLBACK_RADICACION = (
 
 REINICIOS = {"reiniciar", "empezar de nuevo", "empezar de cero", "borrar todo",
              "otra vez desde el principio", "nuevo caso", "cancelar"}
+
+SALUDOS_SIMPLES = {
+    "hola", "buenas", "buenos dias", "buenas tardes", "buenas noches",
+    "buen dia", "hola buenos dias", "hola buenas tardes", "hola buenas noches",
+}
 
 # Rutas que no terminan en un documento: lo que se entrega es una indicación.
 # En cuanto el triage las decide, se contesta. Seguir pidiendo cédula y
@@ -122,6 +127,14 @@ def procesar_turno(telefono: str, texto: str, transcripcion: dict | None = None,
     primera_vez = not caso.get("mensajes")
     esperando_antes = caso.get("esperando")
 
+    # Un saludo no es la historia clínica ni jurídica. Se responde y se espera
+    # el relato antes de activar extracción y triage.
+    if primera_vez and _normalizar(texto) in SALUDOS_SIMPLES:
+        caso = registrar_mensaje(caso, rol="usuario", texto=texto)
+        caso = registrar_mensaje(caso, rol="asistente", texto=SALUDO)
+        sesiones.guardar(telefono, caso)
+        return _decir(SALUDO)
+
     # La persona puede hacer una pregunta durante el formulario. Se responde
     # sin pasarla por extracción ni perder el dato que todavía falta.
     if esperando_antes and _pregunta_sobre_radicacion(texto):
@@ -154,9 +167,6 @@ def procesar_turno(telefono: str, texto: str, transcripcion: dict | None = None,
     accion = resultado["accion"]
 
     acciones: list[dict] = []
-
-    if primera_vez:
-        acciones.append({"tipo": "texto", "texto": SALUDO})
 
     if _dudoso(transcripcion):
         acciones.append({
@@ -265,7 +275,7 @@ def _cerrar_tutela(telefono: str, caso: dict,
             "Tengo toda su información pero el documento no me salió bien. "
             "No le voy a mandar algo incompleto. " + FALLBACK_RADICACION)
 
-    resumen = _resumen_tutela(render, revisiones)
+    resumen = _resumen_tutela(render, revisiones, datos)
 
     acciones = [
         {"tipo": "texto", "texto": resumen},
@@ -282,7 +292,7 @@ def _cerrar_tutela(telefono: str, caso: dict,
     return caso, acciones
 
 
-def _resumen_tutela(render: dict, revisiones: list[str]) -> str:
+def _resumen_tutela(render: dict, revisiones: list[str], datos: dict) -> str:
     lineas = ["Le mandé su acción de tutela. Léala antes de radicarla."]
 
     juez = render.get("juez_destino")
@@ -298,6 +308,14 @@ def _resumen_tutela(render: dict, revisiones: list[str]) -> str:
     lineas.append(
         "Recuerde: la tutela la tiene que presentar usted. "
         "Nosotros no la radicamos.")
+
+    canal_eps = resolver_canal(datos.get("eps") or "").get("canal")
+    if canal_eps and canal_eps.get("url"):
+        lineas.append(
+            "No necesita enviar la tutela a la EPS: el juzgado se encargará "
+            "de notificarla. Si además necesita comunicarse con la EPS, el "
+            f"canal oficial verificado de {canal_eps['nombre']} es "
+            f"{canal_eps['url']}.")
 
     if revisiones:
         lineas.append("Antes de firmarla, revise esto: " + " ".join(revisiones))

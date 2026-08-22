@@ -1,4 +1,5 @@
 import json
+import re
 import unicodedata
 from difflib import SequenceMatcher
 from pathlib import Path
@@ -26,7 +27,15 @@ def normalizar(texto: str | None) -> str:
         if unicodedata.category(c) != "Mn"
     )
 
-    return " ".join(texto.split())
+    texto = re.sub(r"[^a-z0-9]+", " ", texto)
+    texto = " ".join(texto.split())
+
+    # El directorio usa «Bogotá D.C.» y la ciudadanía suele decir «Bogotá».
+    # Para resolver territorio son el mismo distrito.
+    if texto.endswith(" d c"):
+        texto = texto[:-4].strip()
+
+    return texto
 
 
 # ============================================================

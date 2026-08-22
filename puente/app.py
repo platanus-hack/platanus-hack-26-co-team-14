@@ -267,6 +267,16 @@ def procesar(msg: dict) -> None:
     if not telefono:
         return
 
+    message_id = msg.get("id")
+    if message_id:
+        try:
+            kapso.marcar_leido_escribiendo(message_id)
+            log.info("indicador de escritura activado para %s", message_id)
+        except Exception:
+            # Es una mejora visual: si Meta/Kapso la rechaza, la conversación
+            # debe continuar normalmente.
+            log.warning("no se pudo activar el indicador de escritura", exc_info=True)
+
     try:
         entrada = _construir_entrada(msg)
         acciones = backend.procesar(entrada)

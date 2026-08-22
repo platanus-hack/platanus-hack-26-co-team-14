@@ -169,6 +169,19 @@ def enviar_texto(telefono: str, texto: str) -> dict:
     })
 
 
+def marcar_leido_escribiendo(message_id: str) -> dict:
+    """Marca el mensaje como leído y muestra «escribiendo…» en WhatsApp.
+
+    Meta lo retira al enviar la respuesta o después de unos 25 segundos.
+    """
+    return _enviar({
+        "messaging_product": "whatsapp",
+        "status": "read",
+        "message_id": message_id,
+        "typing_indicator": {"type": "text"},
+    })
+
+
 def subir_media(contenido: bytes, nombre: str, content_type: str) -> str | None:
     """Sube un archivo y devuelve su media id. None si falla.
 

@@ -38,6 +38,12 @@ def enviados(monkeypatch):
     """Intercepta todo lo que el puente intentaría mandar por WhatsApp."""
     registro = []
 
+    monkeypatch.setattr(
+        kapso,
+        "marcar_leido_escribiendo",
+        lambda mid: registro.append(("escribiendo", mid)),
+    )
+
     monkeypatch.setattr(kapso, "enviar_texto",
                         lambda tel, txt: registro.append(("texto", tel, txt)))
     monkeypatch.setattr(kapso, "subir_media",
@@ -67,6 +73,7 @@ def test_webhook_contesta_rapido_y_procesa_despues(cliente, enviados, monkeypatc
     assert r.json()["encolados"] == 1
     assert ("texto", "573001112233",
             "recibí: la eps no me ha dado el medicamento") in enviados
+    assert ("escribiendo", "wamid.PRUEBA1") in enviados
 
 
 def test_la_ruta_vieja_de_kapso_sigue_viva(cliente, enviados, monkeypatch):
@@ -104,7 +111,8 @@ def test_los_reintentos_de_kapso_no_duplican(cliente, enviados, monkeypatch):
     segunda = cliente.post("/webhooks/whatsapp", json=EVENTO_TEXTO, headers=cabeceras)
 
     assert segunda.json()["nota"] == "duplicado"
-    assert len(enviados) == 1
+    # Primer evento: indicador + texto. El reintento no produce nada nuevo.
+    assert len(enviados) == 2
 
 
 def test_los_mensajes_que_manda_el_bot_no_se_contestan(cliente, enviados, monkeypatch):
