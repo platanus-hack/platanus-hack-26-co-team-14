@@ -68,8 +68,11 @@ app = FastAPI(title="Puente Tutela Voz", version="1.0", lifespan=ciclo_de_vida)
 # manda subiéndolo a Kapso (media_id), que no necesita disco.
 DIR_MEDIA = Path("/tmp/puente_media") if config.EN_VERCEL \
     else Path(__file__).parent / "_media"
+DIR_DOCS = Path("/tmp/puente_documentos") if config.EN_VERCEL \
+    else Path(__file__).parent / "_documentos"
 try:
     DIR_MEDIA.mkdir(parents=True, exist_ok=True)
+    DIR_DOCS.mkdir(parents=True, exist_ok=True)
 except Exception:
     pass
 
@@ -167,27 +170,43 @@ async def webhook(
 ):
     """Responde en milisegundos. No hace trabajo pesado aquí."""
     crudo = await request.body()
+    log.info(
+        "webhook recibido evento=%s bytes=%d idempotencia=%s",
+        x_webhook_event or "(sin header)",
+        len(crudo),
+        bool(x_idempotency_key),
+    )
 
     if not kapso.firma_valida(crudo, x_webhook_signature):
         log.warning("firma inválida — rechazado")
         return JSONResponse({"ok": False, "error": "firma"}, status_code=401)
 
     if _ya_procesado(x_idempotency_key):
+        log.info("webhook duplicado ignorado: %s", x_idempotency_key)
         return {"ok": True, "nota": "duplicado"}
 
     try:
         payload = await request.json()
     except Exception:
+        log.warning("webhook ignorado: cuerpo no JSON")
         return {"ok": True, "nota": "cuerpo no json"}
 
-    if x_webhook_event and "message.received" not in x_webhook_event:
-        return {"ok": True, "nota": "evento ignorado"}
-
+    normalizados = list(map(kapso.leer_mensaje, kapso.extraer_mensajes(payload)))
     pendientes = [
-        m for m in map(kapso.leer_mensaje, kapso.extraer_mensajes(payload))
+        m for m in normalizados
         if m["direccion"] == "inbound" and m.get("telefono")
     ]
-    log.info("evento %s — %d mensaje(s)", x_webhook_event, len(pendientes))
+    log.info(
+        "evento %s — %d normalizado(s), %d entrante(s): %s",
+        x_webhook_event or "(sin header)",
+        len(normalizados),
+        len(pendientes),
+        [
+            {"id": m.get("id"), "tipo": m.get("tipo"),
+             "direccion": m.get("direccion"), "telefono": bool(m.get("telefono"))}
+            for m in normalizados
+        ],
+    )
 
     if config.MODO_PROCESO == "http" and config.PUBLIC_BASE_URL:
         await asyncio.gather(*(_disparar_tarea(m) for m in pendientes))

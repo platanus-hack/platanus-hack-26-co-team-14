@@ -41,7 +41,14 @@ def _enviar(cuerpo: dict) -> dict:
     if r.status_code >= 400:
         log.error("envío %s → %s", r.status_code, r.text[:400])
         r.raise_for_status()
-    return r.json()
+    respuesta = r.json()
+    log.info(
+        "envío confirmado tipo=%s destino=%s id=%s",
+        cuerpo.get("type"),
+        cuerpo.get("to"),
+        ((respuesta.get("messages") or [{}])[0]).get("id"),
+    )
+    return respuesta
 
 
 # ─── firma del webhook ────────────────────────────────────────────────────
