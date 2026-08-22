@@ -516,7 +516,7 @@ def al_arrancar() -> None:
         "  Faltan en .env: " + ", ".join(faltan) if faltan else "  Llaves cargadas",
         f"  URL publica : {config.PUBLIC_BASE_URL or '(falta)'}  [{config.ORIGEN_BASE_URL}]",
         f"  Modo        : {config.MODO_PROCESO}",
-        f"  Backend     : {config.BACKEND_URL or '(eco, sin backend)'}",
+        f"  Backend     : {backend.modo()}",
         "-" * 66,
     ]
     if url:

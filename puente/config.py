@@ -33,6 +33,7 @@ ELEVENLABS_STT_MODEL = _v("ELEVENLABS_STT_MODEL", "scribe_v1")
 ELEVENLABS_STT_LANGUAGE = _v("ELEVENLABS_STT_LANGUAGE", "spa")
 ELEVENLABS_TTS_MODEL = _v("ELEVENLABS_TTS_MODEL", "eleven_multilingual_v2")
 ELEVENLABS_API_BASE = "https://api.elevenlabs.io/v1"
+ANTHROPIC_API_KEY = _v("ANTHROPIC_API_KEY")
 
 # Ajustes de la voz. Estabilidad alta = más monótona pero más predecible;
 # para leerle datos legales a alguien mayor, conviene alta.
@@ -138,5 +139,6 @@ def faltantes() -> list[str]:
             "KAPSO_PHONE_NUMBER_ID": KAPSO_PHONE_NUMBER_ID,
             "ELEVENLABS_API_KEY": ELEVENLABS_API_KEY,
             "ELEVENLABS_VOICE_ID": ELEVENLABS_VOICE_ID,
+            "ANTHROPIC_API_KEY": ANTHROPIC_API_KEY,
         }.items() if not v
     ]

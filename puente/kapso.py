@@ -79,6 +79,9 @@ def extraer_mensajes(payload: dict) -> list[dict]:
     """
     if payload.get("batch") and isinstance(payload.get("data"), list):
         return [d for d in payload["data"] if isinstance(d, dict)]
+    # Algunos webhooks sin buffering conservan el sobre {event, data}.
+    if isinstance(payload.get("data"), dict) and payload["data"].get("message"):
+        return [payload["data"]]
     return [payload]
 
 
@@ -91,16 +94,20 @@ def leer_mensaje(evento: dict) -> dict:
     transcript = kap.get("transcript") or {}
 
     telefono = (
-        conv.get("phone_number") or conv.get("wa_id")
+        # En payload v2 el número de la persona también viene dentro de
+        # message.kapso.phone_number. Es distinto de phone_number_id, que
+        # identifica el número de WhatsApp Business y no es el destinatario.
+        kap.get("phone_number")
+        or conv.get("phone_number") or conv.get("wa_id")
         or msg.get("from") or evento.get("from")
     )
 
     return {
         "id": msg.get("id"),
-        "tipo": msg.get("type"),
-        "direccion": kap.get("direction", "inbound"),
+        "tipo": msg.get("type") or msg.get("message_type"),
+        "direccion": kap.get("direction") or msg.get("direction") or "inbound",
         "telefono": telefono,
-        "texto": (msg.get("text") or {}).get("body"),
+        "texto": (msg.get("text") or {}).get("body") or msg.get("content"),
         "media_url": kap.get("media_url") or media.get("url"),
         "media_tipo": media.get("content_type"),
         "media_nombre": media.get("filename"),
