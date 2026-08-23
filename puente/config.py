@@ -72,6 +72,9 @@ VERIFICAR_FIRMA = _v("VERIFICAR_FIRMA", "0") == "1"
 UMBRAL_CONFIANZA_STT = float(_v("UMBRAL_CONFIANZA_STT", "0.75") or "0.75")
 PROCESADORES_CONCURRENTES = max(1, int(_v("PROCESADORES_CONCURRENTES", "4") or "4"))
 COLA_MAX_MENSAJES = max(10, int(_v("COLA_MAX_MENSAJES", "200") or "200"))
+RESPONSABLE_DATOS = _v("RESPONSABLE_DATOS", "Temis")
+CORREO_PRIVACIDAD = _v("CORREO_PRIVACIDAD", "")
+URL_POLITICA_DATOS = _v("URL_POLITICA_DATOS", "")
 
 # ─── Servidor ─────────────────────────────────────────────────────────────
 PORT = int(_v("PORT", "8000") or "8000")

@@ -5,7 +5,7 @@ El puente no decide nada del negocio. Recibe, transcribe, se lo pasa al
 backend, y hace lo que el backend le diga.
 
     usuaria ──audio──> Kapso ──webhook──> PUENTE ──POST /mensaje──> BACKEND
-    usuaria <──audio── Kapso <──envío──── PUENTE <──{responder}──── BACKEND
+    usuaria <──audio/botones── Kapso <──envío── PUENTE <──{responder}── BACKEND
 
 ENDPOINTS
     POST  /webhooks/whatsapp   entrada de Kapso (fase 1: responde al instante)
@@ -243,6 +243,8 @@ def _es_entrada_real(msg: dict) -> bool:
         return bool((msg.get("texto") or "").strip())
     if msg.get("tipo") == "audio":
         return bool(msg.get("media_url"))
+    if msg.get("tipo") in {"interactive", "button"}:
+        return bool(msg.get("boton_id") or (msg.get("texto") or "").strip())
     return False
 
 
@@ -311,8 +313,25 @@ def procesar(msg: dict) -> None:
             log.warning("no se pudo activar el indicador de escritura", exc_info=True)
 
     try:
-        entrada = _construir_entrada(msg)
-        if not (entrada.get("texto") or "").strip():
+        consentimiento_pendiente = (
+            msg.get("tipo") == "audio" and
+            not backend.permite_procesar_datos(telefono)
+        )
+        if consentimiento_pendiente:
+            # El backend enviará el aviso de privacidad. No tocamos el archivo
+            # de voz hasta que exista autorización expresa.
+            entrada = {
+                "telefono": telefono,
+                "mensaje_id": message_id,
+                "tipo": "audio",
+                "texto": "",
+                "timestamp": msg.get("timestamp"),
+                "transcripcion": None,
+            }
+            log.info("audio no descargado: consentimiento pendiente para %s", telefono)
+        else:
+            entrada = _construir_entrada(msg)
+        if not (entrada.get("texto") or "").strip() and not consentimiento_pendiente:
             log.warning("mensaje %s sin contenido útil; se ignora sin responder", message_id)
             return
         acciones = backend.procesar(entrada)
@@ -337,6 +356,7 @@ def _construir_entrada(msg: dict) -> dict:
         "texto": (msg.get("texto") or "").strip(),
         "timestamp": msg.get("timestamp"),
         "transcripcion": None,
+        "boton_id": msg.get("boton_id"),
     }
 
     texto_kapso = (msg.get("transcripcion_kapso") or "").strip()
@@ -406,6 +426,23 @@ def _ejecutar(telefono: str, accion: dict) -> None:
 
     elif tipo == "audio":
         enviar_voz(telefono, accion.get("texto", ""), accion.get("voice_id"))
+
+    elif tipo == "botones":
+        try:
+            kapso.enviar_botones(
+                telefono,
+                accion.get("texto", ""),
+                accion.get("botones") or [],
+                encabezado=accion.get("encabezado"),
+                pie=accion.get("pie"),
+            )
+        except Exception:
+            log.warning("no se pudieron enviar botones; uso texto", exc_info=True)
+            kapso.enviar_texto(
+                telefono,
+                accion.get("texto", "") +
+                "\n\nResponda AUTORIZO o NO AUTORIZO.",
+            )
 
     elif tipo == "documento":
         enviar_documento(telefono, accion)

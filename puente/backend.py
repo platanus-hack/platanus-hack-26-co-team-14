@@ -35,17 +35,26 @@ log = logging.getLogger("backend")
 # Manejador en proceso. Lo registra el entrypoint (app.py) para que el puente
 # no tenga que importar el cerebro: el puente sigue sin saber nada del negocio.
 _local = None
+_control_datos = None
 
 
-def registrar_local(manejador) -> None:
+def registrar_local(manejador, control_datos=None) -> None:
     """Conecta un backend que vive en este mismo proceso.
 
     `manejador(mensaje: dict) -> list[dict]` recibe el mismo contrato que
     recibiría por HTTP y devuelve la misma lista de acciones.
     """
-    global _local
+    global _local, _control_datos
     _local = manejador
+    _control_datos = control_datos
     log.info("backend en proceso registrado: %s", getattr(manejador, "__module__", "?"))
+
+
+def permite_procesar_datos(telefono: str) -> bool:
+    """Evita descargar/transcribir audio antes del consentimiento."""
+    if config.BACKEND_URL or _control_datos is None:
+        return True
+    return bool(_control_datos(telefono))
 
 
 def hay_backend() -> bool:

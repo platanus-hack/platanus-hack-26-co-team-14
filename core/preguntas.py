@@ -17,7 +17,7 @@ from rutas import (
 PREGUNTAS_TRIAGE = {
 
     "tutela_previa_cumplida":
-        "Antes de seguir necesito confirmar algo. "
+        "Gracias por contarme lo ocurrido. Antes de continuar, por favor confírmeme algo. "
         "¿Usted ya había presentado una tutela por este mismo problema, "
         "un juez falló a su favor y aun así la EPS no cumplió?",
 
@@ -47,17 +47,17 @@ PREGUNTAS_TRIAGE = {
 PREGUNTAS_DATOS = {
 
     "nombre_completo":
-        "¿Cuál es su nombre completo?",
+        "Por favor, ¿me indica su nombre completo?",
 
     "cedula":
         "¿Cuál es su número de cédula? "
         "Por favor dígamelo dígito por dígito.",
 
     "lugar_expedicion":
-        "¿En qué municipio fue expedida su cédula?",
+        "Por favor, ¿en qué municipio fue expedida su cédula?",
 
     "eps":
-        "¿Cómo se llama su EPS? Por ejemplo: Compensar, Sanitas, Nueva EPS o Sura.",
+        "Por favor, ¿cómo se llama su EPS? Por ejemplo: Compensar, Sanitas, Nueva EPS o Sura.",
 
     "servicio_negado":
         "¿Qué medicamento, procedimiento, tratamiento o servicio necesita?",

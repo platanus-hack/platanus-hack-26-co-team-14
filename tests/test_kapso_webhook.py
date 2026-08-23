@@ -1,3 +1,4 @@
+from puente import kapso
 from puente.kapso import extraer_mensajes, leer_mensaje
 
 
@@ -58,3 +59,46 @@ def test_encuentra_telefono_en_contacto_de_una_variante_del_payload():
     }
 
     assert leer_mensaje(payload)["telefono"] == "573009998877"
+
+
+def test_normaliza_respuesta_de_boton_de_consentimiento():
+    payload = {
+        "message": {
+            "id": "wamid.boton",
+            "from_user_id": "573009998877",
+            "type": "interactive",
+            "interactive": {
+                "type": "button_reply",
+                "button_reply": {
+                    "id": "consentimiento_autorizar",
+                    "title": "Autorizar",
+                },
+            },
+            "kapso": {"direction": "inbound"},
+        }
+    }
+
+    mensaje = leer_mensaje(payload)
+
+    assert mensaje["boton_id"] == "consentimiento_autorizar"
+    assert mensaje["texto"] == "Autorizar"
+
+
+def test_envia_botones_interactivos(monkeypatch):
+    enviados = []
+    monkeypatch.setattr(kapso, "_enviar", lambda cuerpo: enviados.append(cuerpo) or {})
+
+    kapso.enviar_botones(
+        "573001112233",
+        "¿Autoriza?",
+        [
+            {"id": "consentimiento_autorizar", "titulo": "Autorizar"},
+            {"id": "consentimiento_rechazar", "titulo": "No autorizar"},
+        ],
+    )
+
+    cuerpo = enviados[0]
+    assert cuerpo["type"] == "interactive"
+    assert cuerpo["interactive"]["type"] == "button"
+    assert cuerpo["interactive"]["action"]["buttons"][0]["reply"]["id"] == (
+        "consentimiento_autorizar")

@@ -167,6 +167,24 @@ def test_evento_sin_mensaje_real_se_ignora(cliente, enviados):
     assert enviados == []
 
 
+def test_identifica_usuario_en_nuevo_payload_de_kapso():
+    evento = {
+        "message": {
+            "id": "wamid.NUEVO",
+            "type": "text",
+            "text": {"body": "Hola"},
+            "from_user_id": "573221234567",
+            "kapso": {"direction": "inbound"},
+        },
+        "conversation": {"business_scoped_user_id": "987654321012345"},
+        "phone_number_id": "111111111111111",
+    }
+
+    normalizado = kapso.leer_mensaje(evento)
+
+    assert normalizado["telefono"] == "573221234567"
+
+
 def test_conexion_rapida_confirma_sin_esperar(cliente, monkeypatch):
     recibido = []
     monkeypatch.setattr(

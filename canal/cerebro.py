@@ -5,7 +5,7 @@ El puente manda siempre el mismo sobre —lo diga la usuaria hablando o
 escribiendo— y espera siempre la misma respuesta:
 
     entra   {"telefono", "texto", "tipo", "transcripcion", ...}
-    sale    {"responder": [ {"tipo": "texto"|"audio"|"documento", ...} ]}
+    sale    {"responder": [ {"tipo": "texto"|"audio"|"botones"|"documento", ...} ]}
 
 Ese contrato está descrito en puente/README.md, y es el mismo tanto si el
 puente llama por HTTP a otro servicio como si llama aquí, en el mismo proceso.
@@ -33,11 +33,19 @@ def responder(mensaje: dict) -> list[dict]:
         return []
 
     texto = (mensaje.get("texto") or "").strip()
+    boton_id = mensaje.get("boton_id")
+    if boton_id == "consentimiento_autorizar":
+        texto = "AUTORIZO"
+    elif boton_id == "consentimiento_rechazar":
+        texto = "NO AUTORIZO"
     transcripcion = mensaje.get("transcripcion") or None
 
     log.info("turno de %s (%s): %s", telefono, mensaje.get("tipo"), texto[:120])
 
-    acciones = procesar_turno(telefono, texto, transcripcion=transcripcion)
+    acciones = procesar_turno(
+        telefono, texto, transcripcion=transcripcion,
+        mensaje_id=mensaje.get("mensaje_id"),
+    )
 
     log.info("respondo con %d acción(es): %s",
              len(acciones), [a.get("tipo") for a in acciones])
@@ -58,4 +66,11 @@ def conectar() -> None:
                  "en proceso", config.BACKEND_URL)
         return
 
-    backend.registrar_local(responder)
+    backend.registrar_local(responder, consentimiento_otorgado)
+
+
+def consentimiento_otorgado(telefono: str) -> bool:
+    from canal import sesiones
+
+    caso = sesiones.obtener(telefono)
+    return bool((caso.get("consentimiento") or {}).get("otorgado"))

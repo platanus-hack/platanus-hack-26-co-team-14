@@ -28,6 +28,8 @@ def conversar(telefono: str, doble: ClaudeDoble, primer_texto: str,
     del último turno."""
     respuestas = respuestas or {}
     sesiones.borrar(telefono)
+    procesar_turno(telefono, "AUTORIZO", client=doble,
+                   mensaje_id=f"consentimiento-{telefono}")
 
     acciones = procesar_turno(telefono, primer_texto, client=doble)
 
@@ -178,8 +180,11 @@ def test_sin_pedir_nada_va_a_peticion():
         "servicio_negado": "una cita con el especialista",
     })
 
+    telefono = "573007778899"
+    sesiones.borrar(telefono)
+    procesar_turno(telefono, "AUTORIZO", client=doble)
     acciones = procesar_turno(
-        "573007778899",
+        telefono,
         "apenas me la formularon y no sé ni a dónde tengo que ir",
         client=doble)
     sesiones.borrar("573007778899")
@@ -195,7 +200,8 @@ def test_sin_pedir_nada_va_a_peticion():
 
 def test_fallo_incumplido_va_a_desacato():
     doble = ClaudeDoble(inicial={"tutela_previa_cumplida": True})
-
+    sesiones.borrar("573001010101")
+    procesar_turno("573001010101", "AUTORIZO", client=doble)
     acciones = procesar_turno(
         "573001010101",
         "ya puse una tutela, el juez me dio la razón y la eps no ha cumplido",
@@ -209,12 +215,43 @@ def test_fallo_incumplido_va_a_desacato():
 # EL CANAL
 # ============================================================
 
+def test_no_procesa_historia_antes_del_consentimiento():
+    telefono = "573002020201"
+    doble = ClaudeDoble(inicial={"eps": "sura"})
+    sesiones.borrar(telefono)
+
+    acciones = procesar_turno(
+        telefono, "Tengo diabetes y la EPS no me entrega la insulina", client=doble)
+    caso = sesiones.obtener(telefono)
+
+    assert "autorizo" in textos(acciones).lower()
+    assert caso["mensajes"] == []
+    assert caso["datos"]["eps"] is None
+    assert doble.preguntado == []
+    sesiones.borrar(telefono)
+
+
+def test_consentimiento_explicito_queda_registrado():
+    telefono = "573002020200"
+    sesiones.borrar(telefono)
+
+    acciones = procesar_turno(
+        telefono, "AUTORIZO", mensaje_id="wamid.CONSENTIMIENTO")
+    consentimiento = sesiones.obtener(telefono)["consentimiento"]
+
+    assert consentimiento["otorgado"] is True
+    assert consentimiento["mensaje_id"] == "wamid.CONSENTIMIENTO"
+    assert "muchas gracias" in textos(acciones).lower()
+    sesiones.borrar(telefono)
+
 def test_cada_respuesta_va_escrita_y_hablada():
     doble = ClaudeDoble(inicial={})
     acciones = procesar_turno("573002020202", "buenos días", client=doble)
     sesiones.borrar("573002020202")
 
-    assert {a["tipo"] for a in acciones} >= {"texto", "audio"}
+    tipos = {a["tipo"] for a in acciones}
+    assert "audio" in tipos
+    assert tipos & {"texto", "botones"}
 
 
 def test_saludo_solo_invita_a_contar_la_historia_sin_activar_triage():
@@ -222,7 +259,9 @@ def test_saludo_solo_invita_a_contar_la_historia_sin_activar_triage():
     doble = ClaudeDoble(inicial={})
     sesiones.borrar(telefono)
 
-    acciones = procesar_turno(telefono, "Hola", client=doble)
+    aviso = procesar_turno(telefono, "Hola", client=doble)
+    assert "autorizo" in textos(aviso).lower()
+    acciones = procesar_turno(telefono, "AUTORIZO", client=doble)
     dicho = textos(acciones).lower()
 
     assert "cuénteme con sus palabras" in dicho
@@ -237,7 +276,7 @@ def test_triage_empieza_despues_de_recibir_la_historia():
     doble = ClaudeDoble(inicial={})
     sesiones.borrar(telefono)
 
-    procesar_turno(telefono, "Buenos días", client=doble)
+    procesar_turno(telefono, "AUTORIZO", client=doble)
     acciones = procesar_turno(
         telefono,
         "La EPS no me entrega el medicamento que me ordenó el médico",
@@ -253,6 +292,8 @@ def test_triage_empieza_despues_de_recibir_la_historia():
 
 def test_reiniciar_borra_el_caso():
     doble = ClaudeDoble(inicial={"eps": "sura"})
+    sesiones.borrar("573003030303")
+    procesar_turno("573003030303", "AUTORIZO", client=doble)
     procesar_turno("573003030303", "la eps sura no me atiende", client=doble)
 
     acciones = procesar_turno("573003030303", "empezar de nuevo", client=doble)
@@ -263,6 +304,8 @@ def test_reiniciar_borra_el_caso():
 
 def test_audio_ininteligible_no_rompe_nada():
     doble = ClaudeDoble(inicial={})
+    sesiones.borrar("573005050505")
+    procesar_turno("573005050505", "AUTORIZO", client=doble)
     acciones = procesar_turno("573005050505", "", client=doble)
     sesiones.borrar("573005050505")
 
@@ -274,7 +317,7 @@ def test_segundo_intento_fallido_pide_respuesta_escrita():
     doble = ClaudeDoble(inicial={})
     sesiones.borrar(telefono)
 
-    procesar_turno(telefono, "buenas", client=doble)
+    procesar_turno(telefono, "AUTORIZO", client=doble)
     procesar_turno(
         telefono,
         "La EPS no me está entregando el medicamento que necesito",
@@ -293,7 +336,7 @@ def test_responde_pregunta_lateral_sin_perder_el_dato_pendiente():
     doble = ClaudeDoble(inicial={})
     sesiones.borrar(telefono)
 
-    procesar_turno(telefono, "buenas", client=doble)
+    procesar_turno(telefono, "AUTORIZO", client=doble)
     procesar_turno(
         telefono,
         "La EPS no me está entregando el medicamento que necesito",

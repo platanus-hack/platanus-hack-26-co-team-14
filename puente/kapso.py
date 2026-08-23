@@ -25,6 +25,11 @@ _CLAVES_TELEFONO = {
     "from", "wa_id", "phone", "phone_number", "sender_phone",
     "sender_phone_number", "contact_phone", "contact_phone_number",
     "customer_phone", "customer_phone_number", "user_phone_number",
+    # Kapso puede omitir el teléfono y entregar el identificador de WhatsApp
+    # asociado a la persona. Nunca incluimos phone_number_id: ese es el número
+    # del negocio, no el remitente.
+    "from_user_id", "business_scoped_user_id",
+    "parent_business_scoped_user_id",
 }
 
 
@@ -43,6 +48,17 @@ def _buscar_telefono(objeto) -> str | None:
         for valor in objeto:
             if encontrado := _buscar_telefono(valor):
                 return encontrado
+    return None
+
+
+def _destinatario(*candidatos) -> str | None:
+    """Devuelve solo identificadores escalares utilizables por Meta/Kapso."""
+    for valor in candidatos:
+        if not isinstance(valor, (str, int)):
+            continue
+        candidato = str(valor).strip()
+        if len(re.sub(r"\D", "", candidato)) >= 7:
+            return candidato
     return None
 
 
@@ -117,15 +133,32 @@ def leer_mensaje(evento: dict) -> dict:
     conv = evento.get("conversation") or {}
     media = kap.get("media_data") or {}
     transcript = kap.get("transcript") or {}
+    interactive = msg.get("interactive") or {}
+    button_reply = interactive.get("button_reply") or {}
+    list_reply = interactive.get("list_reply") or {}
+    kap_content = kap.get("content") if isinstance(kap.get("content"), dict) else {}
+    boton_id = (
+        button_reply.get("id") or list_reply.get("id")
+        or msg.get("reply_option_id") or kap.get("reply_option_id")
+        or kap_content.get("reply_option_id")
+    )
+    boton_titulo = (
+        button_reply.get("title") or list_reply.get("title")
+        or msg.get("reply_option_title") or kap.get("reply_option_title")
+        or kap_content.get("reply_option_title")
+    )
 
-    telefono = (
+    telefono = _destinatario(
         # En payload v2 el número de la persona también viene dentro de
         # message.kapso.phone_number. Es distinto de phone_number_id, que
         # identifica el número de WhatsApp Business y no es el destinatario.
-        kap.get("phone_number")
-        or conv.get("phone_number") or conv.get("wa_id")
-        or msg.get("from") or evento.get("from")
-        or _buscar_telefono(evento)
+        kap.get("phone_number"), conv.get("phone_number"), conv.get("wa_id"),
+        msg.get("from"), evento.get("from"), msg.get("from_user_id"),
+        msg.get("username"), conv.get("username"),
+        conv.get("business_scoped_user_id"),
+        msg.get("from_parent_user_id"), msg.get("from_user_id"),
+        conv.get("parent_business_scoped_user_id"),
+        _buscar_telefono(evento),
     )
 
     return {
@@ -133,7 +166,10 @@ def leer_mensaje(evento: dict) -> dict:
         "tipo": msg.get("type") or msg.get("message_type"),
         "direccion": kap.get("direction") or msg.get("direction") or "inbound",
         "telefono": telefono,
-        "texto": (msg.get("text") or {}).get("body") or msg.get("content"),
+        "texto": ((msg.get("text") or {}).get("body") or boton_titulo
+                  or boton_id or (msg.get("content") if isinstance(msg.get("content"), str) else None)),
+        "boton_id": boton_id,
+        "boton_titulo": boton_titulo,
         "media_url": kap.get("media_url") or media.get("url"),
         "media_tipo": media.get("content_type"),
         "media_nombre": media.get("filename"),
@@ -166,6 +202,41 @@ def enviar_texto(telefono: str, texto: str) -> dict:
         "to": telefono,
         "type": "text",
         "text": {"body": texto},
+    })
+
+
+def enviar_botones(telefono: str, texto: str, botones: list[dict],
+                   encabezado: str | None = None,
+                   pie: str | None = None) -> dict:
+    """Envía botones de respuesta rápida dentro de la ventana de conversación."""
+    # Meta limita el cuerpo interactivo. Si el aviso legal es largo, se manda
+    # primero completo y los botones quedan en un segundo mensaje corto.
+    if len(texto) > 1000:
+        enviar_texto(telefono, texto)
+        texto = "Después de leer el aviso, ¿autoriza el tratamiento de sus datos?"
+    interactive = {
+        "type": "button",
+        "body": {"text": texto},
+        "action": {
+            "buttons": [
+                {
+                    "type": "reply",
+                    "reply": {"id": str(b["id"]), "title": str(b["titulo"])[:20]},
+                }
+                for b in botones[:3]
+            ]
+        },
+    }
+    if encabezado:
+        interactive["header"] = {"type": "text", "text": encabezado}
+    if pie:
+        interactive["footer"] = {"text": pie}
+    return _enviar({
+        "messaging_product": "whatsapp",
+        "recipient_type": "individual",
+        "to": telefono,
+        "type": "interactive",
+        "interactive": interactive,
     })
 
 

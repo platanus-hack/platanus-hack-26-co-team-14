@@ -24,6 +24,7 @@ import uuid
 from pathlib import Path
 
 from canal import sesiones
+from canal.consentimientos import VERSION_AVISO, registrar as registrar_consentimiento
 from core.bot_core import procesar_texto
 from core.estado import marcar_pregunta, registrar_mensaje
 from core.preguntas import PREGUNTAS_DATOS
@@ -50,9 +51,9 @@ DIR_SALIDAS = (
 # ============================================================
 
 SALUDO = (
-    "Buenos días. Soy el asistente de Temis. "
-    "Cuénteme con sus palabras qué le pasó con su EPS: "
-    "puede mandarme una nota de voz, sin apuro."
+    "Gracias por comunicarse con Temis. Con mucho gusto le ayudaré. "
+    "Cuando se sienta listo, por favor cuénteme desde el principio qué ocurrió "
+    "con su EPS. Puede escribir o enviarme una nota de voz, sin afán."
 )
 
 # Sin dato verificado, esta salida siempre es válida: están obligados a
@@ -81,6 +82,30 @@ def _normalizar(texto: str) -> str:
     plano = unicodedata.normalize("NFKD", (texto or "").lower())
     plano = "".join(c for c in plano if not unicodedata.combining(c))
     return " ".join(re.sub(r"[^\w\s]", " ", plano).split())
+
+
+def _aviso_consentimiento() -> str:
+    responsable = config.RESPONSABLE_DATOS
+    contacto = (
+        f"Puede ejercer sus derechos escribiendo a {config.CORREO_PRIVACIDAD}. "
+        if config.CORREO_PRIVACIDAD else
+        "Puede solicitar información, corrección, eliminación o revocación por este chat. "
+    )
+    politica = (
+        f"La política de tratamiento está disponible aquí: {config.URL_POLITICA_DATOS}. "
+        if config.URL_POLITICA_DATOS else ""
+    )
+    return (
+        f"Antes de comenzar, {responsable} necesita su autorización para tratar "
+        "datos personales sensibles, incluidos su voz, identificación, información "
+        "de salud y documentos del caso. Los usaremos únicamente para transcribir "
+        "su relato, orientarle y preparar el documento jurídico que usted solicite. "
+        "Para prestar el servicio podrán procesarlos Kapso, ElevenLabs y Anthropic. "
+        "Autorizar es voluntario; puede negarse, consultar sus datos, corregirlos, "
+        "pedir su eliminación o revocar la autorización. " + contacto + politica +
+        "Si está de acuerdo, por favor responda exactamente: AUTORIZO. "
+        "Si no está de acuerdo, responda: NO AUTORIZO."
+    )
 
 
 def _pregunta_sobre_radicacion(texto: str) -> bool:
@@ -112,6 +137,25 @@ def _decir(texto: str) -> list[dict]:
     ]
 
 
+def _pedir_consentimiento(prefacio: str = "") -> list[dict]:
+    texto = (prefacio + _aviso_consentimiento()).strip()
+    return [
+        {
+            "tipo": "botones",
+            "encabezado": "Consentimiento informado",
+            "texto": texto,
+            "pie": "Seleccione una opción para continuar.",
+            "botones": [
+                {"id": "consentimiento_autorizar", "titulo": "Autorizar"},
+                {"id": "consentimiento_rechazar", "titulo": "No autorizar"},
+            ],
+        },
+        {"tipo": "audio", "texto": _texto_para_voz(
+            "Antes de comenzar necesito su autorización para tratar sus datos. "
+            "Por favor seleccione Autorizar o No autorizar en el mensaje escrito.")},
+    ]
+
+
 def _texto_para_voz(texto: str) -> str:
     """Quita datos incómodos de deletrear; permanecen visibles en el chat."""
     hablado = re.sub(
@@ -133,15 +177,40 @@ def _texto_para_voz(texto: str) -> str:
 # ============================================================
 
 def procesar_turno(telefono: str, texto: str, transcripcion: dict | None = None,
-                   client=None) -> list[dict]:
+                   client=None, mensaje_id: str | None = None) -> list[dict]:
     """Un mensaje entra, una lista de acciones sale."""
     texto = (texto or "").strip()
 
     if _normalizar(texto) in REINICIOS:
         sesiones.borrar(telefono)
-        return _decir("Listo, empezamos de cero. " + SALUDO)
+        caso = sesiones.obtener(telefono)
+        sesiones.guardar(telefono, caso)
+        return _pedir_consentimiento("Con gusto empezamos desde cero. ")
 
     caso = sesiones.obtener(telefono)
+    consentimiento = caso.get("consentimiento") or {}
+    if not consentimiento.get("otorgado"):
+        respuesta = _normalizar(texto)
+        if "no autorizo" in respuesta:
+            sesiones.borrar(telefono)
+            return _decir(
+                "Entiendo y respeto su decisión. No procesaremos la información "
+                "de su caso. Si después desea continuar, puede volver a escribirnos.")
+        if respuesta in {"autorizo", "si autorizo", "autorizo el tratamiento",
+                         "autorizo el tratamiento de mis datos"}:
+            constancia = registrar_consentimiento(telefono, mensaje_id, texto)
+            caso["consentimiento"] = {
+                "otorgado": True,
+                "version": VERSION_AVISO,
+                "fecha": constancia["fecha"],
+                "mensaje_id": mensaje_id,
+                "respuesta": texto,
+            }
+            sesiones.guardar(telefono, caso)
+            return _decir("Muchas gracias por autorizar el tratamiento de sus datos. " + SALUDO)
+        sesiones.guardar(telefono, caso)
+        return _pedir_consentimiento()
+
     primera_vez = not caso.get("mensajes")
     esperando_antes = caso.get("esperando")
 
@@ -171,7 +240,7 @@ def procesar_turno(telefono: str, texto: str, transcripcion: dict | None = None,
 
     if not texto:
         return _decir(
-            "No logré entender el audio. ¿Me lo puede repetir más despacio?")
+            "Disculpe, no logré entender el audio. ¿Podría repetirlo más despacio, por favor?")
 
     try:
         resultado = procesar_texto(caso, texto, client=client)
@@ -209,7 +278,7 @@ def procesar_turno(telefono: str, texto: str, transcripcion: dict | None = None,
                     "escríbamela aquí por WhatsApp. " + pregunta
                 )
             else:
-                pregunta = "No logré entender esa respuesta. Intentemos una vez más. " + pregunta
+                pregunta = "Disculpe, no logré entender esa respuesta. Intentemos una vez más, por favor. " + pregunta
         acciones += _decir(pregunta)
         sesiones.guardar(telefono, caso)
         return acciones

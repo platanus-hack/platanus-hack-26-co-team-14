@@ -110,6 +110,16 @@ def nuevo_caso(session_id=None) -> dict:
 
         # Evita confundir inferencia con información confirmada.
         "fuente": {},
+
+        # La conversación jurídica no empieza hasta contar con autorización
+        # explícita para tratar datos de salud y demás información sensible.
+        "consentimiento": {
+            "otorgado": False,
+            "version": None,
+            "fecha": None,
+            "mensaje_id": None,
+            "respuesta": None,
+        },
     }
 
 
