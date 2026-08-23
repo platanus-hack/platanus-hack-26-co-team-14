@@ -42,7 +42,7 @@ from urllib.parse import quote
 import httpx
 from fastapi import BackgroundTasks, FastAPI, File, Form, Header, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import backend, cola, config, kapso, voz
@@ -217,6 +217,16 @@ def qr_whatsapp():
         salida.getvalue(),
         media_type="image/svg+xml",
         headers={"Cache-Control": "public, max-age=300"},
+    )
+
+
+@app.get("/qr/whatsapp.png", include_in_schema=False)
+def qr_whatsapp_compatibilidad():
+    """Mantiene funcionando el frontend anterior sin depender de Pillow."""
+    return RedirectResponse(
+        url="/qr/whatsapp.svg",
+        status_code=307,
+        headers={"Cache-Control": "no-store"},
     )
 
 

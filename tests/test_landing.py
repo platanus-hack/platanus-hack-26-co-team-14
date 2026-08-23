@@ -65,6 +65,15 @@ def test_qr_no_inventa_un_numero_si_falta_configuracion(monkeypatch):
     assert qr.status_code == 503
 
 
+def test_qr_png_anterior_redirige_al_svg(monkeypatch):
+    monkeypatch.setattr(config, "PUBLIC_WHATSAPP_NUMBER", "+57 300 111 2233")
+
+    respuesta = cliente.get("/qr/whatsapp.png", follow_redirects=False)
+
+    assert respuesta.status_code == 307
+    assert respuesta.headers["location"] == "/qr/whatsapp.svg"
+
+
 def test_descubre_el_numero_real_desde_kapso(monkeypatch):
     class RespuestaKapso:
         def raise_for_status(self):
