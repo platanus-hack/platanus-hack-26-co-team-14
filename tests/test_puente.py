@@ -173,7 +173,7 @@ def test_identifica_usuario_en_nuevo_payload_de_kapso():
             "id": "wamid.NUEVO",
             "type": "text",
             "text": {"body": "Hola"},
-            "from_user_id": "573221234567",
+            "from_user_id": "CO.2229571711221402",
             "kapso": {"direction": "inbound"},
         },
         "conversation": {"business_scoped_user_id": "987654321012345"},
@@ -182,7 +182,8 @@ def test_identifica_usuario_en_nuevo_payload_de_kapso():
 
     normalizado = kapso.leer_mensaje(evento)
 
-    assert normalizado["telefono"] == "573221234567"
+    assert normalizado["telefono"] is None
+    assert normalizado["identidad_usuario"] == "CO.2229571711221402"
 
 
 def test_conexion_rapida_confirma_sin_esperar(cliente, monkeypatch):

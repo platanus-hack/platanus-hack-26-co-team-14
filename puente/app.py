@@ -195,6 +195,24 @@ async def webhook(
         return {"ok": True, "nota": "cuerpo no json"}
 
     normalizados = list(map(kapso.leer_mensaje, kapso.extraer_mensajes(payload)))
+    for mensaje in normalizados:
+        if (not mensaje.get("telefono") and mensaje.get("conversation_id")
+                and mensaje.get("direccion") == "inbound"):
+            try:
+                mensaje["telefono"] = await run_in_threadpool(
+                    kapso.resolver_telefono_conversacion,
+                    mensaje["conversation_id"],
+                )
+            except Exception:
+                log.warning(
+                    "no se pudo resolver el teléfono de conversación %s",
+                    mensaje.get("conversation_id"), exc_info=True)
+            if not mensaje.get("telefono"):
+                log.warning(
+                    "mensaje BSUID sin phone_number; Kapso aún no permite responder "
+                    "a identidad=%s conversación=%s",
+                    mensaje.get("identidad_usuario"), mensaje.get("conversation_id"),
+                )
     evento_recibido = (x_webhook_event or "").lower() in {
         "message.received", "whatsapp.message.received", ""
     }

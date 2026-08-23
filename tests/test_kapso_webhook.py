@@ -102,3 +102,26 @@ def test_envia_botones_interactivos(monkeypatch):
     assert cuerpo["interactive"]["type"] == "button"
     assert cuerpo["interactive"]["action"]["buttons"][0]["reply"]["id"] == (
         "consentimiento_autorizar")
+
+
+def test_no_confunde_bsuid_con_numero_de_telefono():
+    payload = {
+        "message": {
+            "id": "wamid.bsuid",
+            "type": "text",
+            "text": {"body": "Hola"},
+            "from_user_id": "CO.2229571711221402",
+            "kapso": {"direction": "inbound"},
+        },
+        "conversation": {
+            "id": "conversation-123",
+            "phone_number": None,
+            "business_scoped_user_id": "CO.2229571711221402",
+        },
+    }
+
+    mensaje = leer_mensaje(payload)
+
+    assert mensaje["telefono"] is None
+    assert mensaje["identidad_usuario"] == "CO.2229571711221402"
+    assert mensaje["conversation_id"] == "conversation-123"

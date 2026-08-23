@@ -33,14 +33,20 @@ _CLAVES_TELEFONO = {
 }
 
 
+def _es_numero_whatsapp(valor) -> bool:
+    if not isinstance(valor, (str, int)):
+        return False
+    candidato = str(valor).strip()
+    return bool(re.fullmatch(r"\+?[0-9][0-9 .()-]{6,24}", candidato))
+
+
 def _buscar_telefono(objeto) -> str | None:
     """Encuentra el número de la persona sin confundirlo con phone_number_id."""
     if isinstance(objeto, dict):
         for clave, valor in objeto.items():
-            if clave.lower() in _CLAVES_TELEFONO and isinstance(valor, (str, int)):
+            if clave.lower() in _CLAVES_TELEFONO and _es_numero_whatsapp(valor):
                 candidato = str(valor).strip()
-                if len(re.sub(r"\D", "", candidato)) >= 7:
-                    return candidato
+                return candidato
         for valor in objeto.values():
             if encontrado := _buscar_telefono(valor):
                 return encontrado
@@ -54,11 +60,10 @@ def _buscar_telefono(objeto) -> str | None:
 def _destinatario(*candidatos) -> str | None:
     """Devuelve solo identificadores escalares utilizables por Meta/Kapso."""
     for valor in candidatos:
-        if not isinstance(valor, (str, int)):
+        if not _es_numero_whatsapp(valor):
             continue
         candidato = str(valor).strip()
-        if len(re.sub(r"\D", "", candidato)) >= 7:
-            return candidato
+        return candidato
     return None
 
 
@@ -166,6 +171,11 @@ def leer_mensaje(evento: dict) -> dict:
         "tipo": msg.get("type") or msg.get("message_type"),
         "direccion": kap.get("direction") or msg.get("direction") or "inbound",
         "telefono": telefono,
+        "conversation_id": conv.get("id") or kap.get("whatsapp_conversation_id"),
+        "identidad_usuario": (
+            msg.get("from_user_id") or conv.get("business_scoped_user_id")
+            or msg.get("username") or conv.get("username")
+        ),
         "texto": ((msg.get("text") or {}).get("body") or boton_titulo
                   or boton_id or (msg.get("content") if isinstance(msg.get("content"), str) else None)),
         "boton_id": boton_id,
@@ -184,6 +194,22 @@ def leer_mensaje(evento: dict) -> dict:
             "conversacion": sorted(conv.keys()),
         },
     }
+
+
+def resolver_telefono_conversacion(conversation_id: str) -> str | None:
+    """Consulta Kapso cuando el webhook trae BSUID pero omite el teléfono."""
+    url = (
+        f"{config.KAPSO_API_BASE}/meta/whatsapp/{config.KAPSO_VERSION}/"
+        f"{config.KAPSO_PHONE_NUMBER_ID}/conversations/{conversation_id}"
+    )
+    with httpx.Client(timeout=TIMEOUT) as cliente:
+        respuesta = cliente.get(url, headers=_headers(json=False))
+    respuesta.raise_for_status()
+    datos = respuesta.json()
+    if isinstance(datos.get("data"), dict):
+        datos = datos["data"]
+    telefono = datos.get("phone_number") or datos.get("wa_id")
+    return str(telefono).strip() if _es_numero_whatsapp(telefono) else None
 
 
 def descargar_media(url: str) -> bytes:

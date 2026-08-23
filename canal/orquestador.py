@@ -33,6 +33,7 @@ from juridico import campos
 from juridico.revisor_agente import RevisionAgenteError, revisar_documento
 from juridico.revision import revisar_contexto
 from juridico.render import renderizar_documento
+from puente import config
 
 log = logging.getLogger("orquestador")
 
