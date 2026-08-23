@@ -1,7 +1,6 @@
 const links = [...document.querySelectorAll("[data-whatsapp-link]")];
 const phoneDisplays = [...document.querySelectorAll("[data-phone-display]")];
 const qrPanel = document.querySelector(".qr-panel");
-const qrImage = document.querySelector("#qr-image");
 const messagePreview = document.querySelector("#start-message");
 const configStatus = document.querySelector("#config-status");
 
@@ -53,10 +52,6 @@ function applyConfig(config) {
     link.removeAttribute("aria-disabled");
   });
 
-  if (qrImage) {
-    qrImage.addEventListener("load", () => qrImage.classList.add("is-loaded"), { once: true });
-    qrImage.src = `/qr/whatsapp.png?v=${encodeURIComponent(config.whatsappNumber)}`;
-  }
 }
 
 fetch("/api/public-config", { headers: { Accept: "application/json" }, cache: "no-store" })
