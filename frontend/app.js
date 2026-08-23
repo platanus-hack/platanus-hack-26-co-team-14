@@ -55,7 +55,7 @@ function applyConfig(config) {
 
   if (qrImage) {
     qrImage.addEventListener("load", () => qrImage.classList.add("is-loaded"), { once: true });
-    qrImage.src = `/qr/whatsapp.svg?v=${encodeURIComponent(config.whatsappNumber)}`;
+    qrImage.src = `/qr/whatsapp.png?v=${encodeURIComponent(config.whatsappNumber)}`;
   }
 }
 

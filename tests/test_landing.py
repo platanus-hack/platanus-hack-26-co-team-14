@@ -41,15 +41,15 @@ def test_config_publica_y_qr_comparten_el_mismo_numero(monkeypatch):
     )
 
     publica = cliente.get("/api/public-config")
-    qr = cliente.get("/qr/whatsapp.svg")
+    qr = cliente.get("/qr/whatsapp.png")
 
     assert publica.status_code == 200
     assert publica.json()["configured"] is True
     assert publica.json()["whatsappNumber"] == "573001112233"
     assert publica.json()["whatsappUrl"].startswith("https://wa.me/573001112233?")
     assert qr.status_code == 200
-    assert qr.headers["content-type"].startswith("image/svg+xml")
-    assert b"<svg" in qr.content
+    assert qr.headers["content-type"].startswith("image/png")
+    assert qr.content.startswith(b"\x89PNG\r\n\x1a\n")
 
 
 def test_qr_no_inventa_un_numero_si_falta_configuracion(monkeypatch):
@@ -58,7 +58,7 @@ def test_qr_no_inventa_un_numero_si_falta_configuracion(monkeypatch):
     monkeypatch.setattr(config, "KAPSO_PHONE_NUMBER_ID", "")
 
     publica = cliente.get("/api/public-config")
-    qr = cliente.get("/qr/whatsapp.svg")
+    qr = cliente.get("/qr/whatsapp.png")
 
     assert publica.json()["configured"] is False
     assert publica.json()["whatsappUrl"] is None

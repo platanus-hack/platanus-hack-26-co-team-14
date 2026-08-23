@@ -601,7 +601,9 @@ h1 span {
   display: block;
   width: 100%;
   height: 100%;
+  background: #fff;
   opacity: 0;
+  image-rendering: pixelated;
   transition: opacity 180ms ease;
 }
 
@@ -618,24 +620,6 @@ h1 span {
   opacity: 0.9;
 }
 
-.whatsapp-mark {
-  position: absolute;
-  z-index: 3;
-  top: 50%;
-  left: 50%;
-  display: grid;
-  place-items: center;
-  width: 86px;
-  height: 86px;
-  border: 8px solid white;
-  border-radius: 50%;
-  background: #fff;
-  color: #080808;
-  transform: translate(-50%, -50%);
-  box-shadow: 0 0 0 3px #090909;
-}
-
-.whatsapp-mark svg { width: 58px; fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.7; }
 .scan-arrow { width: 50px; margin: 10px 0 4px; fill: none; stroke: var(--orange); stroke-linecap: round; stroke-linejoin: round; stroke-width: 2.3; }
 
 .qr-instruction {
@@ -751,8 +735,6 @@ h1 span {
   .qr-panel { padding-block: 19px 16px; }
   .qr-panel h2 { margin-bottom: 15px; font-size: 27px; }
   .qr-link { width: min(100%, 250px); }
-  .whatsapp-mark { width: 68px; height: 68px; border-width: 6px; }
-  .whatsapp-mark svg { width: 46px; }
   .scan-arrow { height: 31px; margin-block: 5px 0; }
   .message-preview { min-height: 50px; margin-block: 9px 6px; padding-block: 8px; }
   .trust-strip { min-height: 68px; margin-top: 10px; padding-block: 9px; }
