@@ -3,7 +3,7 @@
   "project-name": "TEMIS",
 
   // Short one-line summary of your project (in Spanish).
-  "project-oneliner-spanish": "Asistente de voz que ayuda a personas a redactar y radicar tutelas, desacatos y PQRD en salud, sin asesoría jurídica improvisada por IA.",
+  "project-oneliner-spanish": "Asistente de voz que ayuda a personas a redactar y radicar tutelas, desacatos y PQRD en salud, con información jurídica verificable.",
 
   // Brief description of your project (in Spanish).
   "project-description-spanish": "TEMIS es un canal conversacional por voz (WhatsApp vía Kapso) que guía a usuarios sin conocimientos legales a través del proceso de solicitar una acción de tutela, un desacato o una PQRD relacionada con salud (EPS, PBS). El usuario habla, el sistema transcribe y extrae la información relevante (cédula, EPS, municipio, hechos), un triage determinístico decide la ruta jurídica correcta, y el sistema genera el documento final (PDF) usando plantillas y citas jurídicas verificadas. La IA solo interviene en la entrada (transcripción y extracción de datos); nunca decide ni redacta el contenido jurídico, que se genera con lógica determinística y fuentes verificadas.",

@@ -189,9 +189,9 @@ def configuracion_publica():
     )
 
 
-@app.get("/qr/whatsapp.svg")
+@app.get("/qr/whatsapp.png")
 def qr_whatsapp():
-    """QR real generado desde el mismo enlace usado por los botones."""
+    """QR PNG de alto contraste generado desde el enlace de los botones."""
     url = _url_whatsapp()
     if not url:
         return JSONResponse(
@@ -201,21 +201,22 @@ def qr_whatsapp():
         )
 
     import qrcode
-    import qrcode.image.svg
-
     codigo = qrcode.QRCode(
-        error_correction=qrcode.constants.ERROR_CORRECT_H,
-        box_size=12,
-        border=2,
+        # Sin logotipos ni adornos dentro del código: corrección M produce
+        # menos módulos y se lee mejor a distancia. Cuatro módulos es la zona
+        # de silencio mínima definida por el estándar QR.
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=16,
+        border=4,
     )
     codigo.add_data(url)
     codigo.make(fit=True)
-    imagen = codigo.make_image(image_factory=qrcode.image.svg.SvgPathImage)
+    imagen = codigo.make_image(fill_color="#000000", back_color="#ffffff")
     salida = io.BytesIO()
-    imagen.save(salida)
+    imagen.save(salida, format="PNG")
     return Response(
         salida.getvalue(),
-        media_type="image/svg+xml",
+        media_type="image/png",
         headers={"Cache-Control": "public, max-age=300"},
     )
 
