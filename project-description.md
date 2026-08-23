@@ -1,8 +1,8 @@
-# Tutela Voz
+# TEMIS
 
-> Orientación jurídica en salud, por voz y WhatsApp, para personas que no saben qué trámite deben iniciar ni cómo redactarlo.
+> Orientación jurídica en salud (y otros sectores de importancia), por voz y WhatsApp, para personas que no saben qué trámite deben iniciar ni cómo redactarlo. Incluso personas que no sepan ni siquiera que es una tutela.
 
-Tutela Voz es un asistente conversacional que ayuda a las personas a ejercer sus derechos en salud en Colombia. Escucha su historia en lenguaje cotidiano, identifica la información relevante y las guía hacia la ruta adecuada: **acción de tutela**, **incidente de desacato**, **derecho de petición**, **PQRD** o espera del término legal.
+TEMIS es un asistente conversacional que ayuda a las personas a ejercer sus derechos en salud en Colombia. Escucha su historia en lenguaje cotidiano, identifica la información relevante y las guía hacia la ruta adecuada: **acción de tutela**, **incidente de desacato**, **derecho de petición**, **PQRD** o espera del término legal.
 
 La persona no necesita conocer conceptos jurídicos, llenar formularios complejos ni saber redactar un documento legal. Puede escribir o enviar notas de voz por WhatsApp.
 
@@ -23,7 +23,7 @@ El lenguaje jurídico, los formularios, los plazos y la búsqueda de canales ofi
 
 ## La solución
 
-Tutela Voz convierte una conversación sencilla en una ruta de acción comprensible.
+TEMIS convierte una conversación sencilla en una ruta de acción comprensible.
 
 1. Solicita autorización expresa para tratar datos personales y sensibles.
 2. Recibe texto o notas de voz mediante WhatsApp y Kapso.
@@ -62,30 +62,9 @@ El sistema evalúa, en un orden definido, preguntas como estas:
 
 Esta decisión se ejecuta mediante reglas de código verificables. El modelo de lenguaje no escoge libremente la ruta.
 
-## Cómo funciona
-
-```mermaid
-flowchart TD
-    A[Mensaje o nota de voz] --> B[Consentimiento informado]
-    B -->|Autoriza| C[Transcripción y extracción]
-    B -->|No autoriza| Z[Fin sin procesar datos]
-    C --> D[Historia de la persona]
-    D --> E[Triage determinístico]
-    E --> F{Ruta}
-    F --> G[Tutela]
-    F --> H[Desacato]
-    F --> I[Derecho de petición]
-    F --> J[PQRD]
-    F --> K[Esperar término]
-    G --> L[Plantilla y datos confirmados]
-    L --> M[Revisión jurídica final]
-    M -->|Aprobar o corregir| N[Documento y guía de radicación]
-    M -->|Falta información| O[Pregunta específica]
-```
-
 ## Seguridad jurídica
 
-Tutela Voz separa las tareas probabilísticas de las decisiones que deben ser controlables.
+TEMIS separa las tareas probabilísticas de las decisiones que deben ser controlables.
 
 ### La IA puede
 
@@ -101,7 +80,7 @@ Tutela Voz separa las tareas probabilísticas de las decisiones que deben ser co
 - escoger libremente la ruta jurídica;
 - inventar hechos, pruebas, diagnósticos, fechas o radicados;
 - modificar los datos confirmados por la persona;
-- garantizar el resultado de una tutela;
+- garantizar al 100% el resultado de una tutela;
 - presentar una medida provisional como si fuera el fallo definitivo;
 - enviar o radicar un documento sin autorización expresa.
 
@@ -140,7 +119,7 @@ El sistema:
 
 ## Accesibilidad conversacional
 
-Tutela Voz está diseñado para comunicarse con respeto y en lenguaje cotidiano.
+TEMIS está diseñado para comunicarse con respeto y en lenguaje cotidiano.
 
 - Responde tanto por escrito como por voz.
 - No lee enlaces ni direcciones de correo electrónico en voz alta.
@@ -162,53 +141,10 @@ El sistema utiliza catálogos locales para:
 Si un dato no está verificado, Tutela Voz no lo inventa. En su lugar, explica una alternativa segura, como acudir a la personería municipal, la Defensoría del Pueblo o un juzgado.
 
 ## Arquitectura
-
-```text
-WhatsApp
-   │
-   ▼
-Kapso ── webhook rápido ──► cola concurrente por teléfono
-                                  │
-                       ┌──────────┴──────────┐
-                       ▼                     ▼
-                 Voz / texto          Conversaciones en paralelo
-                       │                     │
-                       └──────────┬──────────┘
-                                  ▼
-                     extracción estructurada
-                                  │
-                                  ▼
-                       triage determinístico
-                                  │
-                                  ▼
-                  plantillas + revisión jurídica
-                                  │
-                                  ▼
-                   documento + guía de radicación
-```
-
 Los teléfonos diferentes se procesan en paralelo. Los mensajes de una misma conversación conservan su orden. Esto evita que un audio largo bloquee la atención de otras personas.
-
-## Estado actual
-
-| Componente | Estado |
-| --- | --- |
-| Webhook de WhatsApp mediante Kapso | Implementado |
-| Texto, notas de voz e indicador de escritura | Implementado |
-| Botones de consentimiento informado | Implementado |
-| Transcripción y extracción estructurada | Implementado |
-| Triage determinístico | Implementado y probado |
-| Conversaciones concurrentes por teléfono | Implementado |
-| Catálogo de EPS y canales de salud | Implementado |
-| Consulta territorial de juzgados | Implementado |
-| Plantillas de tutela propia, de menor y con agente oficioso | Implementado |
-| Revisión jurídica final | Implementado |
-| Entrega de documento por WhatsApp | Implementado |
-| Radicación automática en nombre de la persona | No habilitada; requiere consentimiento y una integración externa real |
-| Corpus ampliado de tutelas favorables | En construcción |
 
 ## Alcance responsable
 
-Tutela Voz facilita el acceso a información y documentos jurídicos, pero no sustituye la valoración de un abogado, una autoridad administrativa ni un juez. La persona debe revisar y firmar el documento antes de radicarlo.
+TEMIS facilita el acceso a información y documentos jurídicos, pero no sustituye la valoración de un abogado, una autoridad administrativa ni un juez. La persona debe revisar y firmar el documento antes de radicarlo.
 
 El sistema no promete resultados. Su compromiso es más concreto: escuchar con respeto, identificar la ruta adecuada, no inventar información y entregar una orientación comprensible y verificable.
