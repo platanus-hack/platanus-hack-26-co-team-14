@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from pathlib import Path
 
 from docx import Document
@@ -105,7 +106,12 @@ def _aplicar_reemplazos(ruta: Path, reemplazos: list[dict], contexto: dict) -> N
                 "La corrección propuesta no identifica un fragmento único del documento.")
         for parrafo in iterar_parrafos(doc):
             if anterior in parrafo.text:
-                parrafo.text = parrafo.text.replace(anterior, nuevo)
+                texto = parrafo.text.replace(anterior, nuevo)
+                # Un reemplazo mínimo de una locución nominal por un verbo
+                # puede dejar «entregue del medicamento». Conservamos el
+                # artículo del objeto directo sin permitir reescrituras libres.
+                texto = re.sub(r"\b(entregue)\s+del\b", r"\1 el", texto)
+                parrafo.text = texto
                 break
 
     corregido = "\n".join(p.text for p in iterar_parrafos(doc))

@@ -17,7 +17,7 @@ from rutas import (
 PREGUNTAS_TRIAGE = {
 
     "tutela_previa_cumplida":
-        "Gracias por contarme lo ocurrido. Antes de continuar, por favor confírmeme algo. "
+        "Gracias por contarme lo ocurrido. Antes de seguir, por favor confírmeme algo. "
         "¿Usted ya había presentado una tutela por este mismo problema, "
         "un juez falló a su favor y aun así la EPS no cumplió?",
 

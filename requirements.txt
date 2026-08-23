@@ -8,6 +8,7 @@ httpx>=0.28
 
 # Configuración
 python-dotenv>=1.0
+qrcode>=8.2
 
 # Extracción de slots
 anthropic>=0.40

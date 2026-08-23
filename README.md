@@ -117,8 +117,16 @@ python -m puente.probar       # comprobar que TTS y STT sirven
 python arrancar.py            # servidor + túnel + URL para pegar en Kapso
 ```
 
-El detalle del canal —el contrato, los endpoints, el despliegue en Vercel y las
-tres cosas que hay que vigilar allí— está en [`puente/README.md`](puente/README.md).
+El detalle del canal —el contrato, los endpoints y el despliegue en Render o
+Vercel— está en [`puente/README.md`](puente/README.md).
+
+### Landing pública
+
+La ruta `/` sirve la landing de TEMIS; los diagnósticos técnicos siguen en
+`/salud` y `/health`. El QR y los botones obtienen automáticamente desde Kapso
+el número asociado a `KAPSO_PHONE_NUMBER_ID`. `PUBLIC_WHATSAPP_NUMBER` permite
+sobrescribirlo manualmente con el número completo, solo dígitos y con código de
+país. El mensaje inicial puede personalizarse con `WHATSAPP_START_MESSAGE`.
 
 ### Lo que este sistema no hace
 

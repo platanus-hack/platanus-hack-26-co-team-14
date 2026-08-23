@@ -53,8 +53,8 @@ DIR_SALIDAS = (
 
 SALUDO = (
     "Gracias por comunicarse con Temis. Con mucho gusto le ayudaré. "
-    "Cuando se sienta listo, por favor cuénteme desde el principio qué ocurrió "
-    "con su EPS. Puede escribir o enviarme una nota de voz, sin afán."
+    "Cuando se sienta listo, cuénteme con sus palabras qué ocurrió con su EPS, "
+    "desde el principio. Puede escribir o enviarme una nota de voz, sin afán."
 )
 
 # Sin dato verificado, esta salida siempre es válida: están obligados a

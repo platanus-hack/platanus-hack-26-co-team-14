@@ -25,11 +25,8 @@ _CLAVES_TELEFONO = {
     "from", "wa_id", "phone", "phone_number", "sender_phone",
     "sender_phone_number", "contact_phone", "contact_phone_number",
     "customer_phone", "customer_phone_number", "user_phone_number",
-    # Kapso puede omitir el teléfono y entregar el identificador de WhatsApp
-    # asociado a la persona. Nunca incluimos phone_number_id: ese es el número
-    # del negocio, no el remitente.
-    "from_user_id", "business_scoped_user_id",
-    "parent_business_scoped_user_id",
+    # No incluimos phone_number_id ni los business_scoped_user_id: identifican
+    # al negocio o a la persona dentro de Meta, pero no son números marcables.
 }
 
 
@@ -158,11 +155,7 @@ def leer_mensaje(evento: dict) -> dict:
         # message.kapso.phone_number. Es distinto de phone_number_id, que
         # identifica el número de WhatsApp Business y no es el destinatario.
         kap.get("phone_number"), conv.get("phone_number"), conv.get("wa_id"),
-        msg.get("from"), evento.get("from"), msg.get("from_user_id"),
-        msg.get("username"), conv.get("username"),
-        conv.get("business_scoped_user_id"),
-        msg.get("from_parent_user_id"), msg.get("from_user_id"),
-        conv.get("parent_business_scoped_user_id"),
+        msg.get("from"), evento.get("from"),
         _buscar_telefono(evento),
     )
 

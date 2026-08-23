@@ -10,6 +10,8 @@ Nada de esto toca la red: Kapso y ElevenLabs están sustituidos.
 
 from __future__ import annotations
 
+import time
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -107,6 +109,9 @@ def test_el_documento_se_sube_en_vez_de_publicarse(cliente, enviados, monkeypatc
     cliente.post("/webhooks/whatsapp", json=EVENTO_TEXTO,
                  headers={"X-Webhook-Event": "message.received"})
 
+    limite = time.monotonic() + 1
+    while not any(e[0] == "documento" for e in enviados) and time.monotonic() < limite:
+        time.sleep(0.01)
     assert ("documento", "573001112233", "tutela.docx") in enviados
 
 

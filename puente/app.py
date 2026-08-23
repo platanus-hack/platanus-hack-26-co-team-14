@@ -29,17 +29,21 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import io
 import logging
+import re
 import sys
 import time
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
+from urllib.parse import quote
 
 import httpx
 from fastapi import BackgroundTasks, FastAPI, File, Form, Header, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
 
 from . import backend, cola, config, kapso, voz
 
@@ -65,6 +69,11 @@ async def ciclo_de_vida(_: FastAPI):
 
 
 app = FastAPI(title="Puente Tutela Voz", version="1.0", lifespan=ciclo_de_vida)
+
+RAIZ_PROYECTO = Path(__file__).resolve().parents[1]
+DIR_FRONTEND = RAIZ_PROYECTO / "frontend"
+LOGO_TEMIS = RAIZ_PROYECTO / "project-logo.png"
+app.mount("/static", StaticFiles(directory=str(DIR_FRONTEND)), name="static")
 
 # En serverless el disco es efímero: solo /tmp y no sobrevive. El audio se
 # manda subiéndolo a Kapso (media_id), que no necesita disco.
@@ -108,7 +117,112 @@ def _autorizado(cabecera: str | None) -> bool:
 
 @app.get("/")
 def raiz():
-    return {"servicio": "puente-tutela-voz", "salud": "/salud", "docs": "/docs"}
+    """Landing pública; el diagnóstico técnico permanece disponible en /salud."""
+    return FileResponse(
+        DIR_FRONTEND / "index.html",
+        media_type="text/html; charset=utf-8",
+        headers={"Cache-Control": "public, max-age=0, must-revalidate"},
+    )
+
+
+_cache_numero_kapso = {"valor": "", "vence": 0.0}
+
+
+def _numero_desde_kapso() -> str:
+    """Obtiene el número público asociado al phone_number_id ya configurado."""
+    ahora = time.monotonic()
+    if ahora < _cache_numero_kapso["vence"]:
+        return str(_cache_numero_kapso["valor"])
+    if not config.KAPSO_API_KEY or not config.KAPSO_PHONE_NUMBER_ID:
+        return ""
+
+    url = (
+        f"{config.KAPSO_API_BASE}/meta/whatsapp/{config.KAPSO_VERSION}"
+        f"/{config.KAPSO_PHONE_NUMBER_ID}"
+    )
+    try:
+        respuesta = httpx.get(
+            url,
+            headers={"X-API-Key": config.KAPSO_API_KEY},
+            params={"fields": "display_phone_number"},
+            timeout=5.0,
+        )
+        respuesta.raise_for_status()
+        numero = re.sub(r"\D", "", respuesta.json().get("display_phone_number", ""))
+        _cache_numero_kapso.update(
+            valor=numero,
+            vence=ahora + (3600 if numero else 60),
+        )
+        return numero
+    except Exception as exc:
+        _cache_numero_kapso.update(valor="", vence=ahora + 60)
+        log.warning("no se pudo obtener el número público desde Kapso: %s", exc)
+        return ""
+
+
+def _numero_publico() -> str:
+    """Override explícito o número real descubierto de forma segura en Kapso."""
+    manual = re.sub(r"\D", "", config.PUBLIC_WHATSAPP_NUMBER)
+    return manual or _numero_desde_kapso()
+
+
+def _url_whatsapp() -> str | None:
+    numero = _numero_publico()
+    if not numero:
+        return None
+    mensaje = quote(config.WHATSAPP_START_MESSAGE, safe="")
+    return f"https://wa.me/{numero}?text={mensaje}"
+
+
+@app.get("/api/public-config")
+def configuracion_publica():
+    """Única configuración que el frontend puede exponer de forma segura."""
+    numero = _numero_publico()
+    return JSONResponse(
+        {
+            "whatsappNumber": numero,
+            "whatsappUrl": _url_whatsapp(),
+            "startMessage": config.WHATSAPP_START_MESSAGE,
+            "configured": bool(numero),
+        },
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/qr/whatsapp.svg")
+def qr_whatsapp():
+    """QR real generado desde el mismo enlace usado por los botones."""
+    url = _url_whatsapp()
+    if not url:
+        return JSONResponse(
+            {"error": "no se pudo resolver el número público de WhatsApp"},
+            status_code=503,
+            headers={"Cache-Control": "no-store"},
+        )
+
+    import qrcode
+    import qrcode.image.svg
+
+    codigo = qrcode.QRCode(
+        error_correction=qrcode.constants.ERROR_CORRECT_H,
+        box_size=12,
+        border=2,
+    )
+    codigo.add_data(url)
+    codigo.make(fit=True)
+    imagen = codigo.make_image(image_factory=qrcode.image.svg.SvgPathImage)
+    salida = io.BytesIO()
+    imagen.save(salida)
+    return Response(
+        salida.getvalue(),
+        media_type="image/svg+xml",
+        headers={"Cache-Control": "public, max-age=300"},
+    )
+
+
+@app.get("/brand/logo.png", include_in_schema=False)
+def logo_temis():
+    return FileResponse(LOGO_TEMIS, media_type="image/png")
 
 
 @app.get("/salud")

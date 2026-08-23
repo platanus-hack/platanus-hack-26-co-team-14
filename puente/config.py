@@ -26,6 +26,14 @@ KAPSO_WEBHOOK_SECRET = _v("KAPSO_WEBHOOK_SECRET")
 KAPSO_API_BASE = _v("KAPSO_API_BASE", "https://api.kapso.ai")
 KAPSO_VERSION = _v("KAPSO_VERSION", "v24.0")
 
+# Datos públicos de la landing. El número se mantiene fuera del repositorio
+# porque puede cambiar entre el sandbox y el número definitivo de WhatsApp.
+PUBLIC_WHATSAPP_NUMBER = _v("PUBLIC_WHATSAPP_NUMBER")
+WHATSAPP_START_MESSAGE = _v(
+    "WHATSAPP_START_MESSAGE",
+    "Hola, necesito ayuda con un problema que tuve con mi EPS.",
+)
+
 # ─── ElevenLabs ───────────────────────────────────────────────────────────
 ELEVENLABS_API_KEY = _v("ELEVENLABS_API_KEY")
 ELEVENLABS_VOICE_ID = _v("ELEVENLABS_VOICE_ID")
