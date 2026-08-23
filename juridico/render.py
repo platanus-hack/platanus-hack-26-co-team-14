@@ -291,6 +291,43 @@ def placeholders_restantes(doc):
     return restantes
 
 
+def eliminar_medida_provisional(doc):
+    """Retira toda la sección cuando los hechos no justifican urgencia."""
+    eliminando = False
+    inicios = {"MEDIDA PROVISIONAL", "MEDIDA CAUTELAR PROVISIONAL"}
+    finales = {
+        "PRETENSIONES", "FUNDAMENTOS DE DERECHO",
+        "COMPETENCIA", "COMPETENCIA Y PROCEDIMIENTO",
+    }
+    for parrafo in list(doc.paragraphs):
+        titulo = re.sub(r"\s+", " ", parrafo.text.upper()).strip()
+        if titulo in inicios:
+            eliminando = True
+        if eliminando and titulo in finales:
+            eliminando = False
+            continue
+        if eliminando:
+            elemento = parrafo._element
+            elemento.getparent().remove(elemento)
+
+    # La minuta de menor anuncia la medida también en portada y referencia.
+    for parrafo in doc.paragraphs:
+        if "EN EL EVENTO DE NO DECRETARSE LA MEDIDA PROVISIONAL" in parrafo.text.upper():
+            parrafo.text = re.sub(
+                r"En el evento de no decretarse la medida provisional,\s*",
+                "",
+                parrafo.text,
+                flags=re.IGNORECASE,
+            )
+        for run in parrafo.runs:
+            run.text = re.sub(
+                r"\s+CON MEDIDA (?:CAUTELAR )?PROVISIONAL\.?",
+                "",
+                run.text,
+                flags=re.IGNORECASE,
+            )
+
+
 # ============================================================
 # ENRIQUECIMIENTO TERRITORIAL
 # ============================================================
@@ -387,6 +424,9 @@ def renderizar_documento(
     contexto = deepcopy(
         datos
     )
+
+    if contexto.get("_incluir_medida_provisional") is False:
+        eliminar_medida_provisional(doc)
 
     # --------------------------------------------------------
     # 3. Juzgado

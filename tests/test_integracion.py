@@ -110,6 +110,8 @@ def test_tutela_de_un_menor_termina_en_documento(tmp_path):
     assert "Sara Mosquera" in contenido
     assert "26485912" in contenido
     assert "ocho" in contenido          # edad en letras, como pide la minuta
+    assert "MEDIDA CAUTELAR PROVISIONAL" not in contenido.upper()
+    assert "MEDIDA PROVISIONAL" not in contenido.upper()
 
     # Y el caso se cerró: no guardamos datos de salud de más.
     assert sesiones.obtener("573001112233")["datos"]["cedula"] is None
@@ -157,9 +159,15 @@ def test_tutela_propia_termina_en_documento():
     assert "me dicen que no hay y que vuelva" in contenido
     assert "agente oficioso" not in contenido
     assert "mi madre" not in contenido
+    assert "únicamente mientras se decide esta tutela" in contenido
+    assert "para evitar que la demora agrave" in contenido
     dicho = textos(acciones).lower()
     assert "@cendoj.ramajudicial.gov.co" in dicho
     assert "el juzgado se encargará de notificarla" in dicho
+    audio = next(a["texto"] for a in acciones if a["tipo"] == "audio")
+    assert "@" not in audio
+    assert "http" not in audio.lower()
+    assert "escrito en el chat" in audio.lower()
 
 
 def test_sin_pedir_nada_va_a_peticion():
@@ -180,6 +188,9 @@ def test_sin_pedir_nada_va_a_peticion():
     assert "derecho de petición" in dicho
     # Sura está en el catálogo: se da el canal verificado, no uno inventado.
     assert "http" in dicho
+    audio = next(a["texto"] for a in acciones if a["tipo"] == "audio")
+    assert "http" not in audio.lower()
+    assert "escrito en el chat" in audio.lower()
 
 
 def test_fallo_incumplido_va_a_desacato():

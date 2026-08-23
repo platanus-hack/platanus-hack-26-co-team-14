@@ -242,13 +242,18 @@ def partir_fecha(texto) -> tuple[str, str] | None:
 # El mismo dato entra en la minuta en posiciones gramaticales distintas.
 # Se escoge la redacción que funciona en la parte resolutiva —«proceda a…»—,
 # que es la que el juez ordena.
-def _frases_servicio(servicio: str) -> dict:
+def _frases_servicio(servicio: str, incluir_medida: bool) -> dict:
     servicio = servicio.strip()
     return {
         "servicio_ordenado": servicio,
         "servicio_solicitado": servicio,
         "accion_servicio": f"autorizar y entregar {servicio}",
-        "servicio_urgente": f"la autorización y entrega de {servicio}",
+        "servicio_urgente": (
+            "de manera provisional y únicamente mientras se decide esta tutela, "
+            f"la autorización y entrega inmediata de {servicio}, para evitar que "
+            "la demora agrave el estado de salud y vuelva tardía la protección"
+        ),
+        "_incluir_medida_provisional": incluir_medida,
     }
 
 
@@ -311,7 +316,10 @@ def contexto(tipo: str, datos: dict, telefono: str | None = None) -> dict:
         "hecho_vulneracion": str(datos.get("hecho_vulneracion") or "").strip(),
         "notificacion_accionante": _notificacion_persona(nombre, direccion, telefono),
     }
-    ctx.update(_frases_servicio(servicio))
+    incluir_medida = bool(
+        datos.get("riesgo_vital") is True or datos.get("urgencia") is True
+    )
+    ctx.update(_frases_servicio(servicio, incluir_medida))
 
     # ── a quién se notifica ──────────────────────────────────────────────
     texto_entidad, sin_canal = _notificacion_entidad(eps)

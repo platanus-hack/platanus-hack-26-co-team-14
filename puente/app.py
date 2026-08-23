@@ -192,9 +192,13 @@ async def webhook(
         return {"ok": True, "nota": "cuerpo no json"}
 
     normalizados = list(map(kapso.leer_mensaje, kapso.extraer_mensajes(payload)))
+    evento_recibido = (x_webhook_event or "").lower() in {
+        "message.received", "whatsapp.message.received", ""
+    }
+    candidatos = [m for m in normalizados if evento_recibido and _es_entrada_real(m)]
     pendientes = [
-        m for m in normalizados
-        if m["direccion"] == "inbound" and m.get("telefono")
+        m for m in candidatos
+        if not _ya_procesado(f"mensaje:{m['id']}")
     ]
     log.info(
         "evento %s — %d normalizado(s), %d entrante(s): %s",
@@ -219,6 +223,17 @@ async def webhook(
             tareas.add_task(procesar, msg)
 
     return {"ok": True, "encolados": len(pendientes)}
+
+
+def _es_entrada_real(msg: dict) -> bool:
+    """Solo texto o audio enviado realmente por una persona activa el bot."""
+    if msg.get("direccion") != "inbound" or not msg.get("telefono") or not msg.get("id"):
+        return False
+    if msg.get("tipo") == "text":
+        return bool((msg.get("texto") or "").strip())
+    if msg.get("tipo") == "audio":
+        return bool(msg.get("media_url"))
+    return False
 
 
 app.add_api_route(config.WEBHOOK_PATH, webhook, methods=["POST"])
@@ -279,6 +294,9 @@ def procesar(msg: dict) -> None:
 
     try:
         entrada = _construir_entrada(msg)
+        if not (entrada.get("texto") or "").strip():
+            log.warning("mensaje %s sin contenido útil; se ignora sin responder", message_id)
+            return
         acciones = backend.procesar(entrada)
         log.info("backend devolvió %d acción(es)", len(acciones))
         for accion in acciones:

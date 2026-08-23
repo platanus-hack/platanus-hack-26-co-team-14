@@ -36,9 +36,10 @@ from core.estado import nuevo_caso
 
 log = logging.getLogger("sesiones")
 
-# Un caso abandonado no se guarda para siempre. Seis horas es más que una
-# conversación y menos que un dato de salud dormido en un disco ajeno.
-TTL_SEGUNDOS = 6 * 60 * 60
+# Una conversación se apaga tras diez minutos sin mensajes. El valor puede
+# ajustarse para pruebas, pero en producción el defecto protege los datos de
+# salud y evita que un mensaje tardío reactive un formulario anterior.
+TTL_SEGUNDOS = int(os.getenv("SESION_TTL_SEGUNDOS", "600"))
 
 _MEMORIA: dict[str, dict] = {}
 _LOCK = Lock()
@@ -94,22 +95,34 @@ def _escribir_disco(clave: str, caso: dict) -> None:
 
 def obtener(clave: str) -> dict:
     """El caso de esa persona. Si no hay ninguno, uno nuevo."""
+    ahora = time.time()
     with _LOCK:
         caso = _MEMORIA.get(clave)
+        if caso and ahora - float(caso.get("_ultima_actividad", 0)) > TTL_SEGUNDOS:
+            _MEMORIA.pop(clave, None)
+            caso = None
+            log.info("sesión expirada por inactividad para %s", clave)
 
     if caso is None:
         caso = _leer_disco(clave)
 
+    if caso and ahora - float(caso.get("_ultima_actividad", 0)) > TTL_SEGUNDOS:
+        borrar(clave)
+        caso = None
+
     if caso is None:
         caso = nuevo_caso(session_id=clave)
+        caso["_ultima_actividad"] = ahora
         log.info("caso nuevo para %s", clave)
 
     return deepcopy(caso)
 
 
 def guardar(clave: str, caso: dict) -> None:
+    caso = deepcopy(caso)
+    caso["_ultima_actividad"] = time.time()
     with _LOCK:
-        _MEMORIA[clave] = deepcopy(caso)
+        _MEMORIA[clave] = caso
     _escribir_disco(clave, caso)
 
 
@@ -127,5 +140,12 @@ def borrar(clave: str) -> None:
 
 def activas() -> int:
     """Cuántas conversaciones hay abiertas en esta instancia. Para /salud."""
+    ahora = time.time()
     with _LOCK:
+        expiradas = [
+            clave for clave, caso in _MEMORIA.items()
+            if ahora - float(caso.get("_ultima_actividad", 0)) > TTL_SEGUNDOS
+        ]
+        for clave in expiradas:
+            _MEMORIA.pop(clave, None)
         return len(_MEMORIA)

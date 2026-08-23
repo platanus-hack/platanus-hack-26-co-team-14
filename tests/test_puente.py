@@ -15,6 +15,7 @@ from fastapi.testclient import TestClient
 
 import app as aplicacion
 from puente import backend, kapso
+from puente.app import _vistos
 
 EVENTO_TEXTO = {
     "message": {
@@ -31,6 +32,13 @@ EVENTO_TEXTO = {
 @pytest.fixture
 def cliente():
     return TestClient(aplicacion.app)
+
+
+@pytest.fixture(autouse=True)
+def limpiar_idempotencia():
+    _vistos.clear()
+    yield
+    _vistos.clear()
 
 
 @pytest.fixture
@@ -126,6 +134,36 @@ def test_los_mensajes_que_manda_el_bot_no_se_contestan(cliente, enviados, monkey
                      headers={"X-Webhook-Event": "message.received"})
 
     assert r.json()["encolados"] == 0
+    assert enviados == []
+
+
+def test_un_mismo_id_no_activa_dos_veces_el_bot(cliente, enviados, monkeypatch):
+    monkeypatch.setattr(backend, "_local", lambda m: [{"tipo": "texto", "texto": "ok"}])
+
+    primera = cliente.post("/webhooks/whatsapp", json=EVENTO_TEXTO,
+                           headers={"X-Webhook-Event": "message.received"})
+    segunda = cliente.post("/webhooks/whatsapp", json=EVENTO_TEXTO,
+                           headers={"X-Webhook-Event": "message.received"})
+
+    assert primera.json()["encolados"] == 1
+    assert segunda.json()["encolados"] == 0
+    assert [e for e in enviados if e[0] == "texto"] == [
+        ("texto", "573001112233", "ok")
+    ]
+
+
+def test_evento_sin_mensaje_real_se_ignora(cliente, enviados):
+    estado = {
+        "message": {"id": "wamid.ESTADO", "type": "audio",
+                    "kapso": {"direction": "outbound"}},
+        "conversation": {"phone_number": "573001112233"},
+    }
+
+    respuesta = cliente.post(
+        "/webhooks/whatsapp", json=estado,
+        headers={"X-Webhook-Event": "whatsapp.message.sent"})
+
+    assert respuesta.json()["encolados"] == 0
     assert enviados == []
 
 

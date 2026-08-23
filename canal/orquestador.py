@@ -29,6 +29,8 @@ from core.estado import marcar_pregunta, registrar_mensaje
 from core.preguntas import PREGUNTAS_DATOS
 from datos.canales_salud import resolver_canal
 from juridico import campos
+from juridico.revisor_agente import RevisionAgenteError, revisar_documento
+from juridico.revision import revisar_contexto
 from juridico.render import renderizar_documento
 
 log = logging.getLogger("orquestador")
@@ -106,8 +108,24 @@ def _decir(texto: str) -> list[dict]:
     """
     return [
         {"tipo": "texto", "texto": texto},
-        {"tipo": "audio", "texto": texto},
+        {"tipo": "audio", "texto": _texto_para_voz(texto)},
     ]
+
+
+def _texto_para_voz(texto: str) -> str:
+    """Quita datos incómodos de deletrear; permanecen visibles en el chat."""
+    hablado = re.sub(
+        r"https?://\S+",
+        "el enlace que le dejé escrito en el chat",
+        texto,
+        flags=re.IGNORECASE,
+    )
+    hablado = re.sub(
+        r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}",
+        "que le dejé escrito en el chat",
+        hablado,
+    )
+    return hablado
 
 
 # ============================================================
@@ -264,11 +282,20 @@ def _cerrar_tutela(telefono: str, caso: dict,
         return _preguntar(caso, pendientes[0])
 
     try:
-        contexto = campos.contexto(tipo, datos, telefono=telefono)
+        datos_documento = {**datos, **caso.get("slots", {})}
+        contexto = campos.contexto(tipo, datos_documento, telefono=telefono)
+        contexto = revisar_contexto(tipo, contexto)
         revisiones = contexto.pop("_revisiones", [])
         archivo = DIR_SALIDAS / f"{uuid.uuid4().hex}_{tipo}.docx"
         render = renderizar_documento(
             tipo=tipo, datos=contexto, salida=archivo, resolver_juzgado=False)
+        revision_final = revisar_documento(tipo, render["archivo"], contexto)
+        if revision_final.get("modo") == "agente":
+            log.info("revisión jurídica final: %s", revision_final.get("decision"))
+    except RevisionAgenteError as exc:
+        log.warning("documento bloqueado por revisión jurídica: %s", exc)
+        return caso, _decir(
+            "Antes de entregarle la tutela necesito corregir algo: " + str(exc))
     except Exception:
         log.exception("no se pudo generar el documento (%s)", tipo)
         return caso, _decir(
@@ -283,7 +310,7 @@ def _cerrar_tutela(telefono: str, caso: dict,
          "archivo": render["archivo"],
          "nombre": "tutela.docx",
          "descripcion": "Su acción de tutela, lista para revisar y radicar."},
-        {"tipo": "audio", "texto": resumen},
+        {"tipo": "audio", "texto": _texto_para_voz(resumen)},
     ]
 
     # El caso cumplió su función. No guardamos datos de salud más tiempo del
