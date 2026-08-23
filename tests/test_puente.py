@@ -14,7 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 import app as aplicacion
-from puente import backend, kapso
+from puente import backend, cola, config, kapso
 from puente.app import _vistos
 
 EVENTO_TEXTO = {
@@ -165,6 +165,24 @@ def test_evento_sin_mensaje_real_se_ignora(cliente, enviados):
 
     assert respuesta.json()["encolados"] == 0
     assert enviados == []
+
+
+def test_conexion_rapida_confirma_sin_esperar(cliente, monkeypatch):
+    recibido = []
+    monkeypatch.setattr(
+        cola, "encolar",
+        lambda funcion, mensaje: recibido.append(mensaje) is None or True,
+    )
+
+    respuesta = cliente.post(
+        "/api/conexion-rapida",
+        json={"telefono": "573001112233", "texto": "Hola"},
+        headers={"Authorization": f"Bearer {config.API_TOKEN}"},
+    )
+
+    assert respuesta.status_code == 202
+    assert respuesta.json()["encolado"] is True
+    assert recibido[0]["texto"] == "Hola"
 
 
 # ============================================================

@@ -4,12 +4,26 @@ Haiku extrae (probabilístico) -> el código decide (determinístico).
     P(slot=1 | audio)  --umbral asimétrico-->  {0, 1, ⊥}  --f(x)-->  ruta
 """
 import os
+from threading import Lock
 import unicodedata
 from pathlib import Path
 from rutas import decidir_ruta   # única fuente de verdad del enrutamiento
 
 MODELO = "claude-haiku-4-5-20251001"
 SKILL = (Path(__file__).parent / "skills/triage-extraccion/SKILL.md").read_text(encoding="utf-8")
+_CLIENTE = None
+_CLIENTE_LOCK = Lock()
+
+
+def _cliente_compartido():
+    """Conserva el pool HTTP entre turnos y evita una conexión TLS por mensaje."""
+    global _CLIENTE
+    if _CLIENTE is None:
+        with _CLIENTE_LOCK:
+            if _CLIENTE is None:
+                import anthropic
+                _CLIENTE = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+    return _CLIENTE
 
 BOOLEANOS = ["riesgo_vital", "sujeto_especial", "urgencia",
              "tutela_previa_cumplida", "termino_vencido"]
@@ -125,8 +139,7 @@ def resolver(slots: dict) -> dict:
 def extraer(texto: str, esperando=None, client=None) -> dict:
     """Devuelve {slots, ruta, crudo, descartados}."""
     if client is None:
-        import anthropic
-        client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+        client = _cliente_compartido()
 
     pista = (f"\n\nLa última pregunta que se le hizo fue sobre: {esperando}. "
              f"Es probable que su respuesta se refiera a eso." if esperando else "")

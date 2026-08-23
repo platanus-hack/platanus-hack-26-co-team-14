@@ -41,7 +41,7 @@ from fastapi import BackgroundTasks, FastAPI, File, Form, Header, Request, Uploa
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, JSONResponse, Response
 
-from . import backend, config, kapso, voz
+from . import backend, cola, config, kapso, voz
 
 for _f in (sys.stdout, sys.stderr):
     try:
@@ -58,8 +58,10 @@ log = logging.getLogger("puente")
 
 @asynccontextmanager
 async def ciclo_de_vida(_: FastAPI):
+    cola.iniciar()
     al_arrancar()
     yield
+    cola.cerrar()
 
 
 app = FastAPI(title="Puente Tutela Voz", version="1.0", lifespan=ciclo_de_vida)
@@ -124,6 +126,7 @@ def salud():
         "faltan_en_env": config.faltantes(),
         "verificar_firma": config.VERIFICAR_FIRMA,
         "voz_configurada": bool(config.ELEVENLABS_VOICE_ID),
+        "cola": cola.estado(),
     }
 
 
@@ -213,16 +216,23 @@ async def webhook(
         ],
     )
 
+    encolados = 0
     if config.MODO_PROCESO == "http" and config.PUBLIC_BASE_URL:
         await asyncio.gather(*(_disparar_tarea(m) for m in pendientes))
+        encolados = len(pendientes)
     else:
         if config.MODO_PROCESO == "http":
             log.error("MODO_PROCESO=http sin URL publica; se procesa en segundo "
                       "plano (en serverless esto no termina)")
+        aceptados = 0
         for msg in pendientes:
-            tareas.add_task(procesar, msg)
+            if cola.encolar(procesar, msg):
+                aceptados += 1
+        encolados = aceptados
+        if aceptados != len(pendientes):
+            log.error("cola sin capacidad: %d de %d aceptados", aceptados, len(pendientes))
 
-    return {"ok": True, "encolados": len(pendientes)}
+    return {"ok": True, "encolados": encolados}
 
 
 def _es_entrada_real(msg: dict) -> bool:
@@ -272,8 +282,16 @@ async def tarea_procesar(request: Request,
     if not _autorizado(authorization):
         return JSONResponse({"error": "no autorizado"}, status_code=401)
     msg = await request.json()
-    await run_in_threadpool(procesar, msg)
-    return {"ok": True}
+    # En serverless hay que esperar: el proceso puede morir al responder. En
+    # Render/local se encola y este endpoint también contesta inmediatamente.
+    if config.MODO_PROCESO == "http":
+        await run_in_threadpool(procesar, msg)
+        return {"ok": True, "encolado": False}
+    aceptado = cola.encolar(procesar, msg)
+    return JSONResponse(
+        {"ok": aceptado, "encolado": aceptado},
+        status_code=202 if aceptado else 503,
+    )
 
 
 def procesar(msg: dict) -> None:
@@ -321,7 +339,17 @@ def _construir_entrada(msg: dict) -> dict:
         "transcripcion": None,
     }
 
-    if msg.get("tipo") == "audio" and msg.get("media_url"):
+    texto_kapso = (msg.get("transcripcion_kapso") or "").strip()
+    if msg.get("tipo") == "audio" and texto_kapso:
+        entrada["texto"] = texto_kapso
+        entrada["transcripcion"] = {
+            "texto": texto_kapso,
+            "confianza": 1.0,
+            "baja_confianza": False,
+            "origen": "kapso",
+        }
+        log.info("se reutilizó la transcripción de Kapso para %s", msg.get("id"))
+    elif msg.get("tipo") == "audio" and msg.get("media_url"):
         audio = kapso.descargar_media(msg["media_url"])
         log.info("audio %d bytes (%s)", len(audio), msg.get("media_tipo"))
         t0 = time.time()
@@ -338,6 +366,35 @@ def _construir_entrada(msg: dict) -> dict:
         entrada["texto"] = tr["texto"]
 
     return entrada
+
+
+@app.post("/api/conexion-rapida")
+async def conexion_rapida(request: Request,
+                          authorization: str | None = Header(default=None)):
+    """Entrada asíncrona de texto: confirma recepción sin esperar al agente."""
+    if not _autorizado(authorization):
+        return JSONResponse({"error": "no autorizado"}, status_code=401)
+    try:
+        cuerpo = await request.json()
+    except Exception:
+        return JSONResponse({"error": "cuerpo no json"}, status_code=400)
+    telefono = str(cuerpo.get("telefono") or "").strip()
+    texto = str(cuerpo.get("texto") or "").strip()
+    if not telefono or not texto:
+        return JSONResponse(
+            {"error": "faltan telefono o texto"}, status_code=400)
+    mensaje = {
+        "id": str(cuerpo.get("mensaje_id") or f"rapido-{uuid.uuid4().hex}"),
+        "telefono": telefono,
+        "tipo": "text",
+        "texto": texto,
+        "timestamp": cuerpo.get("timestamp"),
+    }
+    aceptado = cola.encolar(procesar, mensaje)
+    return JSONResponse(
+        {"ok": aceptado, "encolado": aceptado, "mensaje_id": mensaje["id"]},
+        status_code=202 if aceptado else 503,
+    )
 
 
 def _ejecutar(telefono: str, accion: dict) -> None:

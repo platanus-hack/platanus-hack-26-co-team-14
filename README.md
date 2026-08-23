@@ -56,6 +56,16 @@ usuaria ─audio─> Kapso ─webhook─> puente/ ─STT─> texto
 usuaria <─voz + documento─ Kapso <─ puente/
 ```
 
+El webhook confirma la recepción inmediatamente. En Render, una cola de
+trabajo procesa teléfonos distintos en paralelo y conserva el orden de los
+mensajes de cada conversación. El estado de la cola aparece en `/health` y
+`/salud`.
+
+Para integraciones de texto que no pasan por Kapso existe
+`POST /api/conexion-rapida`. Requiere `Authorization: Bearer <API_TOKEN>` y
+recibe `{"telefono": "573...", "texto": "..."}`. Devuelve `202` al encolar;
+la respuesta se envía después por WhatsApp sin mantener abierta la petición.
+
 ### Estructura
 
 ```

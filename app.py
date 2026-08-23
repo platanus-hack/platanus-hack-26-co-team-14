@@ -37,7 +37,7 @@ import os
 from fastapi import Header, Request
 from fastapi.responses import JSONResponse
 
-from puente import config
+from puente import cola, config
 from puente.app import app          # trae el puente entero, ya montado
 
 from canal import cerebro
@@ -102,5 +102,6 @@ def health():
         "backend": backend.modo(),
         "extraccion_lista": bool(os.getenv("ANTHROPIC_API_KEY")),
         "conversaciones_abiertas": activas(),
+        "cola": cola.estado(),
         "plantillas": sorted(PLANTILLAS_DISPONIBLES),
     }
